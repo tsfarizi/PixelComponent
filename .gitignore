@@ -1,0 +1,33 @@
+# Unreal Engine generated
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Build artifacts
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# IDE
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Plugin specific
+*.txt
+!README.md
+
+# Qwen
+.qwen/
