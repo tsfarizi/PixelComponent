@@ -10,6 +10,7 @@
 #include "PixelComponentAsset.h"
 #include "PixelComponentMaterialLibrary.h"
 #include "PixelComponentSettings.h"
+#include "PixelImage.h"
 
 /**
  * FPixelComponentModule

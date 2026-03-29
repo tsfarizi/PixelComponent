@@ -7,21 +7,22 @@ public class PixelComponent : ModuleRules
 	public PixelComponent(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-		
-		PublicDependencyModuleNames.AddRange(new string[] 
-		{ 
+
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
 			"Core",
 			"CoreUObject",
 			"Engine",
 			"Json",
 			"JsonUtilities",
-			"DeveloperSettings"  // For UPixelComponentSettings
-		});
-
-		PrivateDependencyModuleNames.AddRange(new string[] 
-		{ 
+			"DeveloperSettings",  // For UPixelComponentSettings
+			"UMG",                 // For UPixelImage widget
 			"Slate",
 			"SlateCore"
+		});
+
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
 		});
 
 		// Enable C++17/20 features
