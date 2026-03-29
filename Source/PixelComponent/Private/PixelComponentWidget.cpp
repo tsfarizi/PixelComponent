@@ -1,22 +1,24 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "PixelImage.h"
+#include "PixelComponentWidget.h"
 #include "PixelComponentMaterialLibrary.h"
+#include "PixelComponentSettings.h"
 #include "Components/Widget.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/Texture2D.h"
 
-DEFINE_LOG_CATEGORY_STATIC(LogPixelImage, Log, All);
+DEFINE_LOG_CATEGORY_STATIC(LogPixelComponent, Log, All);
 
-UPixelImage::UPixelImage()
+UPixelComponent::UPixelComponent()
 	: PixelAsset(nullptr)
 	, bAutoInitializeMaterial(true)
 	, DynamicMaterialInstance(nullptr)
 {
+	bIsVariable = true;
 }
 
-void UPixelImage::SynchronizeProperties()
+void UPixelComponent::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
 
@@ -26,7 +28,7 @@ void UPixelImage::SynchronizeProperties()
 	}
 }
 
-void UPixelImage::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+void UPixelComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
@@ -37,10 +39,10 @@ void UPixelImage::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedE
 
 	const FName PropertyName = PropertyChangedEvent.Property->GetFName();
 
-	if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, PixelAsset) ||
-		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, TargetSlice) ||
-		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, ActivePaletteProfile) ||
-		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, bAutoInitializeMaterial))
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponent, PixelAsset) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponent, TargetSlice) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponent, ActivePaletteProfile) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponent, bAutoInitializeMaterial))
 	{
 		if (bAutoInitializeMaterial && PixelAsset)
 		{
@@ -49,7 +51,7 @@ void UPixelImage::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedE
 	}
 }
 
-void UPixelImage::SetPixelAsset(UPixelComponentAsset* NewAsset)
+void UPixelComponent::SetPixelAsset(UPixelComponentAsset* NewAsset)
 {
 	if (PixelAsset != NewAsset)
 	{
@@ -62,7 +64,7 @@ void UPixelImage::SetPixelAsset(UPixelComponentAsset* NewAsset)
 	}
 }
 
-void UPixelImage::SetTargetSlice(const FString& NewSlice)
+void UPixelComponent::SetTargetSlice(const FString& NewSlice)
 {
 	if (TargetSlice != NewSlice)
 	{
@@ -75,7 +77,7 @@ void UPixelImage::SetTargetSlice(const FString& NewSlice)
 	}
 }
 
-void UPixelImage::SetActivePaletteProfile(const FName& NewProfile)
+void UPixelComponent::SetActivePaletteProfile(const FName& NewProfile)
 {
 	if (ActivePaletteProfile != NewProfile)
 	{
@@ -88,7 +90,7 @@ void UPixelImage::SetActivePaletteProfile(const FName& NewProfile)
 	}
 }
 
-void UPixelImage::SetAutoInitializeMaterialEnabled(bool bEnabled)
+void UPixelComponent::SetAutoInitializeMaterialEnabled(bool bEnabled)
 {
 	if (bAutoInitializeMaterial != bEnabled)
 	{
@@ -105,13 +107,15 @@ void UPixelImage::SetAutoInitializeMaterialEnabled(bool bEnabled)
 	}
 }
 
-void UPixelImage::RefreshMaterialParameters()
+void UPixelComponent::RefreshMaterialParameters()
 {
 	if (!ValidateConfiguration())
 	{
-		UE_LOG(LogPixelImage, Warning, TEXT("Cannot refresh material: invalid configuration"));
+		UE_LOG(LogPixelComponent, Warning, TEXT("Cannot refresh material: invalid configuration"));
 		return;
 	}
+
+	ApplyTextureFromAsset();
 
 	if (!DynamicMaterialInstance && bAutoInitializeMaterial)
 	{
@@ -124,7 +128,7 @@ void UPixelImage::RefreshMaterialParameters()
 	}
 }
 
-void UPixelImage::ClearMaterial()
+void UPixelComponent::ClearMaterial()
 {
 	if (DynamicMaterialInstance)
 	{
@@ -132,44 +136,38 @@ void UPixelImage::ClearMaterial()
 		DynamicMaterialInstance = nullptr;
 	}
 
-	SetBrush(FSlateBrush());
+	FSlateBrush EmptyBrush;
+	EmptyBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
+	SetBrush(EmptyBrush);
 }
 
-void UPixelImage::InitializeMaterialInstance()
+void UPixelComponent::InitializeMaterialInstance()
 {
 	if (!PixelAsset)
 	{
-		UE_LOG(LogPixelImage, Warning, TEXT("Cannot initialize material: no PixelAsset assigned"));
+		UE_LOG(LogPixelComponent, Warning, TEXT("Cannot initialize material: no PixelAsset assigned"));
 		return;
 	}
 
 	UTexture2D* SourceTexture = PixelAsset->GetSourceTexture();
 	if (!SourceTexture)
 	{
-		UE_LOG(LogPixelImage, Warning, TEXT("Cannot initialize material: PixelAsset has no source texture"));
+		UE_LOG(LogPixelComponent, Warning, TEXT("Cannot initialize material: PixelAsset has no source texture"));
 		return;
 	}
 
-	UMaterialInterface* BaseMaterial = GetBaseMaterial();
-
-	if (!BaseMaterial)
+	UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
+	if (!Settings || !Settings->DefaultPixelMaterial)
 	{
-		UE_LOG(LogPixelImage, Log, TEXT("No base material in brush, using default material"));
-
-		BaseMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/WorldGridMaterial.WorldGridMaterial"));
-
-		if (!BaseMaterial)
-		{
-			UE_LOG(LogPixelImage, Error, TEXT("Failed to load default material. Please assign a material to the widget's brush."));
-			return;
-		}
+		UE_LOG(LogPixelComponent, Error, TEXT("No default pixel material specified in settings"));
+		return;
 	}
 
-	DynamicMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
+	DynamicMaterialInstance = UMaterialInstanceDynamic::Create(Settings->DefaultPixelMaterial, this);
 
 	if (!DynamicMaterialInstance)
 	{
-		UE_LOG(LogPixelImage, Error, TEXT("Failed to create dynamic material instance"));
+		UE_LOG(LogPixelComponent, Error, TEXT("Failed to create dynamic material instance"));
 		return;
 	}
 
@@ -177,10 +175,10 @@ void UPixelImage::InitializeMaterialInstance()
 
 	SetBrushFromMaterial(DynamicMaterialInstance);
 
-	UE_LOG(LogPixelImage, Log, TEXT("Initialized material instance for PixelImage"));
+	UE_LOG(LogPixelComponent, Log, TEXT("Initialized material instance for PixelComponent"));
 }
 
-void UPixelImage::SendMaterialParameters()
+void UPixelComponent::SendMaterialParameters()
 {
 	if (!PixelAsset || !DynamicMaterialInstance)
 	{
@@ -212,12 +210,12 @@ void UPixelImage::SendMaterialParameters()
 		FPixelComponentMaterialLibrary::ApplyPaletteProfile(PixelAsset, ActivePaletteProfile, DynamicMaterialInstance);
 	}
 
-	UE_LOG(LogPixelImage, Verbose, TEXT("Sent material parameters for PixelImage (Slice: %s, Palette: %s)"),
+	UE_LOG(LogPixelComponent, Verbose, TEXT("Sent material parameters (Slice: %s, Palette: %s)"),
 		TargetSlice.IsEmpty() ? TEXT("<full texture>") : *TargetSlice,
 		ActivePaletteProfile == NAME_None ? TEXT("<none>") : *ActivePaletteProfile.ToString());
 }
 
-bool UPixelImage::ValidateConfiguration() const
+bool UPixelComponent::ValidateConfiguration() const
 {
 	if (!PixelAsset)
 	{
@@ -226,7 +224,7 @@ bool UPixelImage::ValidateConfiguration() const
 
 	if (!PixelAsset->HasValidTexture())
 	{
-		UE_LOG(LogPixelImage, Warning, TEXT("PixelAsset has no valid source texture"));
+		UE_LOG(LogPixelComponent, Warning, TEXT("PixelAsset has no valid source texture"));
 		return false;
 	}
 
@@ -237,7 +235,7 @@ bool UPixelImage::ValidateConfiguration() const
 
 		if (!bFound)
 		{
-			UE_LOG(LogPixelImage, Warning, TEXT("Target slice '%s' not found in PixelAsset"), *TargetSlice);
+			UE_LOG(LogPixelComponent, Warning, TEXT("Target slice '%s' not found in PixelAsset"), *TargetSlice);
 			return false;
 		}
 	}
@@ -245,13 +243,25 @@ bool UPixelImage::ValidateConfiguration() const
 	return true;
 }
 
-UMaterialInterface* UPixelImage::GetBaseMaterial() const
+void UPixelComponent::ApplyTextureFromAsset()
 {
-	const FSlateBrush CurrentBrush = GetBrush();
-	if (CurrentBrush.GetResourceObject())
+	if (!PixelAsset)
 	{
-		return Cast<UMaterialInterface>(CurrentBrush.GetResourceObject());
+		return;
 	}
 
-	return nullptr;
+	UTexture2D* SourceTexture = PixelAsset->GetSourceTexture();
+	if (!SourceTexture)
+	{
+		UE_LOG(LogPixelComponent, Verbose, TEXT("No source texture to apply"));
+		return;
+	}
+
+	FSlateBrush CurrentBrush = GetBrush();
+	CurrentBrush.SetResourceObject(SourceTexture);
+	CurrentBrush.ImageSize = FVector2f(static_cast<float>(SourceTexture->GetSurfaceWidth()), 
+		static_cast<float>(SourceTexture->GetSurfaceHeight()));
+	SetBrush(CurrentBrush);
+
+	UE_LOG(LogPixelComponent, Verbose, TEXT("Applied texture from asset: %s"), *SourceTexture->GetName());
 }

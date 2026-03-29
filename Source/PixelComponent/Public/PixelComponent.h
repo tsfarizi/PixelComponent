@@ -10,7 +10,7 @@
 #include "PixelComponentAsset.h"
 #include "PixelComponentMaterialLibrary.h"
 #include "PixelComponentSettings.h"
-#include "PixelImage.h"
+#include "PixelComponentWidget.h"
 #include "PixelAssetPicker.h"
 
 /**

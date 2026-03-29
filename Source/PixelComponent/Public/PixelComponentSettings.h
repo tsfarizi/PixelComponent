@@ -183,7 +183,7 @@ public:
 
 	/**
 	 * Default texture interpolation mode for pixel art.
-	 * 
+	 *
 	 * For pixel art, typically you want Nearest/Point filtering to preserve crisp pixels.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Texture Settings", meta = (
@@ -194,7 +194,7 @@ public:
 
 	/**
 	 * Whether to enable mipmaps for pixel art textures.
-	 * 
+	 *
 	 * Typically disabled for pixel art to preserve crisp edges at all distances.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Texture Settings", meta = (
@@ -202,6 +202,18 @@ public:
 		ToolTip = "Generate mipmaps for imported pixel art textures (typically disabled for pixel art)"
 	))
 	bool bGenerateMipmaps;
+
+	/**
+	 * Default material for PixelComponent widgets.
+	 *
+	 * This material is used by UPixelComponent widgets to render pixel art.
+	 * Should have a Texture parameter named "PixelTexture".
+	 */
+	UPROPERTY(EditAnywhere, Category = "Material Settings", meta = (
+		DisplayName = "Default Pixel Material",
+		ToolTip = "Default material used by PixelComponent widgets (should have PixelTexture parameter)"
+	))
+	UMaterialInterface* DefaultPixelMaterial;
 
 	/**
 	 * Group name for organizing imported assets.

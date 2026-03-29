@@ -5,60 +5,54 @@
 #include "CoreMinimal.h"
 #include "Components/Image.h"
 #include "PixelComponentAsset.h"
-#include "PixelImage.generated.h"
+#include "PixelComponentWidget.generated.h"
 
 /**
- * UPixelImage
+ * UPixelComponent
  *
- * Custom UMG Widget for displaying PixelComponent assets with automatic
- * material parameter injection. This widget extends UImage to provide
- * seamless integration with the PixelComponent system.
+ * UMG Widget for displaying PixelComponent assets with automatic material
+ * and metadata injection. This widget extends UImage to provide seamless
+ * integration with the PixelComponent system.
+ *
+ * Visual Encapsulation:
+ * - Texture source is exclusively from UPixelComponentAsset
+ * - No manual texture input allowed
+ * - Brush is automatically configured when PixelAsset is assigned
  *
  * Features:
- * - Automatic material instance creation and management
- * - Slice UV coordinate injection for sprite sheet animation
+ * - Automatic material instance creation from settings
+ * - Slice UV coordinate injection for sprite sheet regions
  * - 9-slice margin support for scalable UI elements
+ * - Palette profile support for dynamic recoloring
  * - Real-time preview in UMG Designer via PostEditChangeProperty
  *
  * Usage:
- * 1. Add "Pixel Image" widget to your UMG layout from the Palette
- * 2. Assign a PixelComponentAsset to the PixelAsset property
- * 3. Optionally specify a TargetSlice for sprite sheet regions
- * 4. Enable bAutoInitializeMaterial for automatic setup
+ * 1. Add "Pixel Component" widget to UMG layout from Palette
+ * 2. Assign PixelComponentAsset to PixelAsset property
+ * 3. Optionally specify TargetSlice for sprite sheet regions
+ * 4. Optionally assign ActivePaletteProfile for color overrides
  *
- * The widget automatically creates a Dynamic Material Instance and configures
- * all necessary parameters (texture dimensions, UV coordinates, 9-slice margins)
- * when the PixelAsset or TargetSlice properties change.
+ * The widget automatically manages Dynamic Material Instance and configures
+ * all parameters (texture, UVs, margins, colors) when properties change.
  */
-UCLASS(ClassGroup = (Custom), meta = (DisplayName = "Pixel Image", Category = "Pixel Component"))
-class PIXELCOMPONENT_API UPixelImage : public UImage
+UCLASS(ClassGroup = (Custom), meta = (DisplayName = "Pixel Component", Category = "Pixel Component"))
+class PIXELCOMPONENT_API UPixelComponent : public UImage
 {
 	GENERATED_BODY()
 
 public:
-	UPixelImage();
+	UPixelComponent();
 
-	// ========================================================================
-	// UWidget Interface
-	// ========================================================================
-
-	/**
-	 * Synchronize properties from widget to Slate representation.
-	 * Called when widget properties change in the Designer or at runtime.
-	 */
+	//~ Begin UWidget Interface
 	virtual void SynchronizeProperties() override;
+	//~ End UWidget Interface
 
-	// ========================================================================
-	// UObject Interface
-	// ========================================================================
-
-	/**
-	 * Handle property changes in the Editor for real-time preview.
-	 */
+	//~ Begin UObject Interface
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+	//~ End UObject Interface
 
 	// ========================================================================
-	// Pixel Image API
+	// Pixel Component API
 	// ========================================================================
 
 	/**
@@ -70,6 +64,7 @@ public:
 
 	/**
 	 * Set the PixelComponent asset for this widget.
+	 * Texture and material are automatically configured from the asset.
 	 * @param NewAsset The PixelComponent asset to display
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Image")
@@ -84,6 +79,7 @@ public:
 
 	/**
 	 * Set the target slice name for sprite sheet regions.
+	 * Leave empty to display the full texture.
 	 * @param NewSlice Name of the slice to display
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Image")
@@ -126,7 +122,7 @@ public:
 
 	/**
 	 * Manually refresh material parameters.
-	 * Call this after changing PixelAsset or TargetSlice at runtime.
+	 * Call this after changing properties at runtime.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Image")
 	void RefreshMaterialParameters();
@@ -144,7 +140,7 @@ protected:
 
 	/**
 	 * The PixelComponent asset to display.
-	 * Assign your imported Aseprite asset here.
+	 * Texture and material are automatically derived from this asset.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Image", meta = (AllowPrivateAccess = "true"))
 	UPixelComponentAsset* PixelAsset;
@@ -165,8 +161,8 @@ protected:
 
 	/**
 	 * Automatically create and configure material instance.
-	 * When enabled, the widget will automatically create a Dynamic Material
-	 * Instance and configure all parameters when PixelAsset changes.
+	 * When enabled, the widget automatically creates a Dynamic Material
+	 * Instance and configures all parameters when PixelAsset changes.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Image", meta = (AllowPrivateAccess = "true"))
 	bool bAutoInitializeMaterial;
@@ -175,7 +171,7 @@ protected:
 	 * Internal dynamic material instance.
 	 * Created automatically when bAutoInitializeMaterial is true.
 	 */
-	UPROPERTY(Transient, DuplicateTransient)
+	UPROPERTY(Transient, DuplicateTransient, BlueprintReadOnly, Category = "Pixel Component|Internal")
 	UMaterialInstanceDynamic* DynamicMaterialInstance;
 
 	// ========================================================================
@@ -184,13 +180,13 @@ protected:
 
 	/**
 	 * Initialize the dynamic material instance.
-	 * Creates a new MID from the Brush's material and configures parameters.
+	 * Creates a new MID from settings base material and configures parameters.
 	 */
 	void InitializeMaterialInstance();
 
 	/**
-	 * Send all material parameters based on current PixelAsset and TargetSlice.
-	 * Includes texture dimensions, UV coordinates, and 9-slice margins.
+	 * Send all material parameters based on current configuration.
+	 * Includes texture, UV coordinates, 9-slice margins, and palette colors.
 	 */
 	void SendMaterialParameters();
 
@@ -201,8 +197,8 @@ protected:
 	bool ValidateConfiguration() const;
 
 	/**
-	 * Get the base material from the current Brush.
-	 * @return Pointer to the base material
+	 * Apply texture from PixelAsset to the widget brush.
+	 * Automatically retrieves SourceTexture from the asset.
 	 */
-	UMaterialInterface* GetBaseMaterial() const;
+	void ApplyTextureFromAsset();
 };
