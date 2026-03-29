@@ -131,8 +131,23 @@ bool FPixelComponentMaterialLibrary::SendTextureDimensionsToMaterial(
 		return false;
 	}
 
-	int32 TexWidth, TexHeight;
-	Asset->GetTextureDimensions(TexWidth, TexHeight);
+	// Get texture dimensions directly from Asset->GetSourceTexture()
+	UTexture2D* SourceTexture = Asset->GetSourceTexture();
+	
+	int32 TexWidth = 0;
+	int32 TexHeight = 0;
+
+	if (SourceTexture)
+	{
+		// Use actual texture dimensions from SourceTexture
+		TexWidth = SourceTexture->GetSurfaceWidth();
+		TexHeight = SourceTexture->GetSurfaceHeight();
+	}
+	else
+	{
+		// Fallback to cached dimensions from asset
+		Asset->GetTextureDimensions(TexWidth, TexHeight);
+	}
 
 	// Send as individual scalars
 	MaterialInstance->SetScalarParameterValue(Param_PixelTextureWidth, static_cast<float>(TexWidth));
@@ -144,8 +159,9 @@ bool FPixelComponentMaterialLibrary::SendTextureDimensionsToMaterial(
 		FLinearColor(static_cast<float>(TexWidth), static_cast<float>(TexHeight), 0.0f, 0.0f)
 	);
 
-	UE_LOG(LogPixelComponentMaterial, Verbose, 
-		TEXT("Sent texture dimensions to material: %dx%d"), TexWidth, TexHeight);
+	UE_LOG(LogPixelComponentMaterial, Verbose,
+		TEXT("Sent texture dimensions to material: %dx%d (from SourceTexture: %s)"),
+		TexWidth, TexHeight, SourceTexture ? *SourceTexture->GetName() : TEXT("nullptr, using cached"));
 
 	return true;
 }

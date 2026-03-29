@@ -10,6 +10,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "Logging/MessageLog.h"
 #include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentFactory, Log, All);
 
@@ -190,66 +191,101 @@ bool UPixelComponentFactory::FindAndLinkSourceTexture(
 	const FString Directory = FPaths::GetPath(JsonFilePath);
 	const FString BaseName = FPaths::GetBaseFilename(JsonFilePath);
 
-	// Look for PNG file with same base name
-	const FString PngPath = FPaths::Combine(Directory, BaseName + TEXT(".png"));
-	
-	// Also check for common image formats
-	TArray<FString> PossibleExtensions = { TEXT("png"), TEXT("PNG"), TEXT("jpg"), TEXT("jpeg"), TEXT("bmp") };
-	
+	UE_LOG(LogPixelComponentFactory, Log,
+		TEXT("Looking for source texture for JSON: %s"), *JsonFilePath);
+
+	// Supported image extensions for texture lookup
+	TArray<FString> PossibleExtensions = { TEXT("png"), TEXT("PNG"), TEXT("jpg"), TEXT("jpeg"), TEXT("bmp"), TEXT("tga") };
+
 	FString FoundTexturePath;
+	FString FoundExtension;
+
+	// Use IFileManager for robust file detection
+	IFileManager& FileManager = IFileManager::Get();
+
 	for (const FString& Ext : PossibleExtensions)
 	{
 		const FString TestPath = FPaths::Combine(Directory, BaseName + TEXT(".") + Ext);
-		if (FPaths::FileExists(TestPath))
+		
+		// Check if file exists using FileManager
+		if (FileManager.FileExists(*TestPath))
 		{
 			FoundTexturePath = TestPath;
+			FoundExtension = Ext;
+			UE_LOG(LogPixelComponentFactory, Log,
+				TEXT("Found matching texture file: %s"), *FoundTexturePath);
 			break;
 		}
 	}
 
 	if (FoundTexturePath.IsEmpty())
 	{
-		UE_LOG(LogPixelComponentFactory, Warning, 
-			TEXT("No source texture found for %s (expected %s.png or similar)"), 
-			*BaseName, *BaseName);
+		UE_LOG(LogPixelComponentFactory, Warning,
+			TEXT("No source texture found for %s (expected %s.png or similar in %s)"),
+			*BaseName, *BaseName, *Directory);
 		if (Warn)
 		{
-			Warn->Logf(ELogVerbosity::Warning, 
-				TEXT("PixelComponent: Source texture not found. Please import the PNG manually."));
+			Warn->Logf(ELogVerbosity::Warning,
+				TEXT("PixelComponent: Source texture not found for '%s'. Please import the PNG manually."),
+				*BaseName);
 		}
 		return false;
 	}
 
 	// Convert to Unreal package path
-	FString PackagePath = FPaths::ConvertRelativePathToFull(FoundTexturePath);
-	FString RelativePath = PackagePath;
+	FString FullPath = FPaths::ConvertRelativePathToFull(FoundTexturePath);
+	FString RelativePath = FullPath;
 	FPaths::MakePathRelativeTo(RelativePath, *FPaths::ProjectContentDir());
 	const FString AssetPath = TEXT("/Game/") + FPaths::GetBaseFilename(RelativePath);
 
-	// Try to load the texture
+	UE_LOG(LogPixelComponentFactory, Log,
+		TEXT("Attempting to load texture from package path: %s"), *AssetPath);
+
+	// Try to find existing loaded object first
 	UObject* ExistingObject = FindObject<UObject>(nullptr, *AssetPath);
+	
 	if (!ExistingObject)
 	{
-		// Try to load from disk
-		ExistingObject = LoadObject<UObject>(nullptr, *AssetPath);
+		// Try to load from disk using StaticLoadObject
+		ExistingObject = StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AssetPath);
+		
+		if (!ExistingObject)
+		{
+			// Try alternative path format
+			const FString AlternativePath = FoundTexturePath;
+			ExistingObject = StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AlternativePath);
+		}
 	}
 
 	if (ExistingObject && ExistingObject->IsA<UTexture2D>())
 	{
 		UTexture2D* Texture = Cast<UTexture2D>(ExistingObject);
 		Asset->SetSourceTexture(Texture);
-		UE_LOG(LogPixelComponentFactory, Log, 
-			TEXT("Linked source texture: %s"), *Texture->GetName());
+		
+		UE_LOG(LogPixelComponentFactory, Log,
+			TEXT("Successfully linked source texture: %s (loaded from %s)"),
+			*Texture->GetName(), *FoundExtension);
+		
+		// Log texture dimensions for verification
+		if (Texture)
+		{
+			UE_LOG(LogPixelComponentFactory, Verbose,
+				TEXT("Texture dimensions: %dx%d"),
+				static_cast<int32>(Texture->GetSurfaceWidth()),
+				static_cast<int32>(Texture->GetSurfaceHeight()));
+		}
+		
 		return true;
 	}
 	else
 	{
-		UE_LOG(LogPixelComponentFactory, Warning, 
+		UE_LOG(LogPixelComponentFactory, Warning,
 			TEXT("Found texture file but could not load: %s"), *FoundTexturePath);
 		if (Warn)
 		{
-			Warn->Logf(ELogVerbosity::Warning, 
-				TEXT("PixelComponent: Texture file exists but could not be loaded. Import the PNG first."));
+			Warn->Logf(ELogVerbosity::Warning,
+				TEXT("PixelComponent: Texture file '%s' exists but could not be loaded. Import the PNG first."),
+				*FoundTexturePath);
 		}
 		return false;
 	}

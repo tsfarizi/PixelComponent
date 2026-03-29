@@ -72,9 +72,10 @@ public:
 
 	/**
 	 * Send texture dimensions to material parameters.
+	 * Automatically retrieves texture dimensions from Asset->GetSourceTexture().
 	 * Also sends GlobalPixelScale from UPixelComponentSettings.
-	 * 
-	 * @param Asset The PixelComponent asset
+	 *
+	 * @param Asset The PixelComponent asset (texture dimensions retrieved from SourceTexture)
 	 * @param MaterialInstance The dynamic material instance to update
 	 * @return true if parameters were successfully set
 	 */

@@ -138,8 +138,18 @@ int32 UPixelComponentAsset::GetGlobalPixelSize()
 
 FPixelUVRect UPixelComponentAsset::ComputeNormalizedUVs(const FPixelRect& PixelRect) const
 {
+	// Use SourceTexture dimensions if available for dynamic UV calculation
+	int32 TexWidth = CachedTextureWidth;
+	int32 TexHeight = CachedTextureHeight;
+
+	if (SourceTexture)
+	{
+		TexWidth = SourceTexture->GetSurfaceWidth();
+		TexHeight = SourceTexture->GetSurfaceHeight();
+	}
+
 	return FPixelUVRect::FromPixelRect(PixelRect.X, PixelRect.Y, PixelRect.Width, PixelRect.Height,
-		CachedTextureWidth, CachedTextureHeight);
+		TexWidth, TexHeight);
 }
 
 FPixelUVRect UPixelComponentAsset::GetSliceNormalizedUVRect(const FString& SliceName) const
@@ -226,10 +236,20 @@ void UPixelComponentAsset::RefreshNormalizedUVs()
 {
 	UpdateTextureDimensionsCache();
 
-	if (CachedTextureWidth <= 0 || CachedTextureHeight <= 0)
+	// Use SourceTexture dimensions if available for dynamic UV calculation
+	int32 TexWidth = CachedTextureWidth;
+	int32 TexHeight = CachedTextureHeight;
+
+	if (SourceTexture)
 	{
-		UE_LOG(LogPixelComponentAsset, Warning, TEXT("Cannot compute UVs: invalid texture dimensions %dx%d"), 
-			CachedTextureWidth, CachedTextureHeight);
+		TexWidth = SourceTexture->GetSurfaceWidth();
+		TexHeight = SourceTexture->GetSurfaceHeight();
+	}
+
+	if (TexWidth <= 0 || TexHeight <= 0)
+	{
+		UE_LOG(LogPixelComponentAsset, Warning, TEXT("Cannot compute UVs: invalid texture dimensions %dx%d"),
+			TexWidth, TexHeight);
 		bUVsComputed = false;
 		return;
 	}
@@ -237,25 +257,25 @@ void UPixelComponentAsset::RefreshNormalizedUVs()
 	// Compute UVs for all slices using effective (scaled) dimensions
 	for (FSliceData& Slice : Slices)
 	{
-		Slice.ComputeNormalizedUVs(CachedTextureWidth, CachedTextureHeight);
+		Slice.ComputeNormalizedUVs(TexWidth, TexHeight);
 	}
 
 	// Compute UVs for all frames
 	for (FFrameData& Frame : Frames)
 	{
-		Frame.ComputeNormalizedUVs(CachedTextureWidth, CachedTextureHeight);
+		Frame.ComputeNormalizedUVs(TexWidth, TexHeight);
 	}
 
 	bUVsComputed = true;
-	
+
 	// Validate UVs
 	if (!ValidateUVs())
 	{
 		UE_LOG(LogPixelComponentAsset, Error, TEXT("UV validation failed for asset %s"), *GetPathName());
 	}
-	
-	UE_LOG(LogPixelComponentAsset, Verbose, TEXT("Refreshed UVs for %d slices, %d frames (effective size: %dx%d)"), 
-		Slices.Num(), Frames.Num(), CachedTextureWidth, CachedTextureHeight);
+
+	UE_LOG(LogPixelComponentAsset, Verbose, TEXT("Refreshed UVs for %d slices, %d frames (effective size: %dx%d)"),
+		Slices.Num(), Frames.Num(), TexWidth, TexHeight);
 }
 
 bool UPixelComponentAsset::ValidateAsset() const

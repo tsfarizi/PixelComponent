@@ -54,6 +54,13 @@ public:
 	void SetSourceTexture(UTexture2D* NewTexture);
 
 	/**
+	 * Check if this asset has a valid source texture.
+	 * @return true if SourceTexture is valid and non-null
+	 */
+	UFUNCTION(BlueprintCallable, Category = "PixelComponent|Asset")
+	bool HasValidTexture() const { return SourceTexture != nullptr; }
+
+	/**
 	 * Get the asset name from Aseprite metadata.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "PixelComponent|Asset")
@@ -226,9 +233,10 @@ public:
 	/**
 	 * Compute normalized UV coordinates for a given pixel rectangle.
 	 * This converts from pixel-space to 0-1 UV space.
-	 * 
+	 *
 	 * @param PixelRect The pixel-space rectangle
 	 * @return Normalized UV rectangle
+	 * @note Uses SourceTexture dimensions if available, otherwise uses cached dimensions
 	 */
 	UFUNCTION(BlueprintCallable, Category = "PixelComponent|UV")
 	FPixelUVRect ComputeNormalizedUVs(const FPixelRect& PixelRect) const;
@@ -237,6 +245,7 @@ public:
 	 * Get the normalized UV rectangle for a specific slice.
 	 * @param SliceName Name of the slice
 	 * @return Normalized UV rectangle, or invalid if slice not found
+	 * @note Uses SourceTexture dimensions if available for dynamic UV calculation
 	 */
 	UFUNCTION(BlueprintCallable, Category = "PixelComponent|UV")
 	FPixelUVRect GetSliceNormalizedUVRect(const FString& SliceName) const;
@@ -245,6 +254,7 @@ public:
 	 * Get the center UV region for a 9-slice.
 	 * @param SliceName Name of the 9-slice
 	 * @return UV rectangle for the center (tileable) region
+	 * @note Uses SourceTexture dimensions if available for dynamic UV calculation
 	 */
 	UFUNCTION(BlueprintCallable, Category = "PixelComponent|UV")
 	FPixelUVRect GetNineSliceCenterUVRect(const FString& SliceName) const;
@@ -252,6 +262,7 @@ public:
 	/**
 	 * Get all UV coordinates as array for batch material updates.
 	 * @return Array of UV rectangles (MinX, MinY, MaxX, MaxY as Vector4f)
+	 * @note Uses SourceTexture dimensions if available for dynamic UV calculation
 	 */
 	UFUNCTION(BlueprintCallable, Category = "PixelComponent|UV")
 	TArray<FVector4f> GetAllSliceUVsAsVector4() const;
