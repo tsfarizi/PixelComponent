@@ -7,7 +7,6 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentMaterial, Log, All);
 
-// Parameter name definitions
 const FName FPixelComponentMaterialLibrary::Param_Prefix(TEXT("PixelComponent_"));
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureWidth(TEXT("PixelTextureWidth"));
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureHeight(TEXT("PixelTextureHeight"));
@@ -37,13 +36,9 @@ bool FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(
 
 	bool bSuccess = true;
 
-	// Inject global settings first (GlobalPixelScale, VirtualResolution)
 	bSuccess &= InjectGlobalSettings(MaterialInstance);
-
-	// Send texture dimensions
 	bSuccess &= SendTextureDimensionsToMaterial(Asset, MaterialInstance);
 
-	// Get 9-slice margins
 	const FMargin Margins = Asset->GetNineSliceMargins();
 
 	if (Margins.Left > 0 || Margins.Top > 0 || Margins.Right > 0 || Margins.Bottom > 0)
@@ -57,7 +52,6 @@ bool FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(
 			{
 				const FMargin UVMargins = ConvertMarginsToNormalizedUV(Margins, TexWidth, TexHeight);
 
-				// Send as Vector4 for efficient shader access
 				MaterialInstance->SetVectorParameterValue(
 					Param_NineSliceMarginsUV,
 					FLinearColor(UVMargins.Left, UVMargins.Top, UVMargins.Right, UVMargins.Bottom)
@@ -65,13 +59,12 @@ bool FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(
 			}
 		}
 
-		// Also send individual scalar parameters for flexibility
 		MaterialInstance->SetScalarParameterValue(Param_NineSliceLeft, Margins.Left);
 		MaterialInstance->SetScalarParameterValue(Param_NineSliceTop, Margins.Top);
 		MaterialInstance->SetScalarParameterValue(Param_NineSliceRight, Margins.Right);
 		MaterialInstance->SetScalarParameterValue(Param_NineSliceBottom, Margins.Bottom);
 
-		UE_LOG(LogPixelComponentMaterial, Verbose, 
+		UE_LOG(LogPixelComponentMaterial, Verbose,
 			TEXT("Sent 9-slice margins to material: L=%f, T=%f, R=%f, B=%f"),
 			Margins.Left, Margins.Top, Margins.Right, Margins.Bottom);
 	}
@@ -93,7 +86,7 @@ bool FPixelComponentMaterialLibrary::SendSliceNineSliceToMaterial(
 	const FSliceData* Slice = Asset->FindSliceByName(SliceName);
 	if (!Slice || !Slice->bIsNineSlice)
 	{
-		UE_LOG(LogPixelComponentMaterial, Warning, 
+		UE_LOG(LogPixelComponentMaterial, Warning,
 			TEXT("Slice '%s' not found or is not a 9-slice"), *SliceName);
 		return false;
 	}
@@ -105,7 +98,6 @@ bool FPixelComponentMaterialLibrary::SendSliceNineSliceToMaterial(
 
 	if (!bUseNormalizedUVs && TexWidth > 0 && TexHeight > 0)
 	{
-		// Convert back to pixels if needed
 		MarginsToSend.Left *= TexWidth;
 		MarginsToSend.Top *= TexHeight;
 		MarginsToSend.Right *= TexWidth;
@@ -117,7 +109,6 @@ bool FPixelComponentMaterialLibrary::SendSliceNineSliceToMaterial(
 		FLinearColor(MarginsToSend.Left, MarginsToSend.Top, MarginsToSend.Right, MarginsToSend.Bottom)
 	);
 
-	// Also send the slice UV rectangle
 	SendSliceUVToMaterial(Asset, SliceName, MaterialInstance);
 
 	return true;
@@ -132,29 +123,24 @@ bool FPixelComponentMaterialLibrary::SendTextureDimensionsToMaterial(
 		return false;
 	}
 
-	// Get texture dimensions directly from Asset->GetSourceTexture()
 	UTexture2D* SourceTexture = Asset->GetSourceTexture();
-	
+
 	int32 TexWidth = 0;
 	int32 TexHeight = 0;
 
 	if (SourceTexture)
 	{
-		// Use actual texture dimensions from SourceTexture
 		TexWidth = SourceTexture->GetSurfaceWidth();
 		TexHeight = SourceTexture->GetSurfaceHeight();
 	}
 	else
 	{
-		// Fallback to cached dimensions from asset
 		Asset->GetTextureDimensions(TexWidth, TexHeight);
 	}
 
-	// Send as individual scalars
 	MaterialInstance->SetScalarParameterValue(Param_PixelTextureWidth, static_cast<float>(TexWidth));
 	MaterialInstance->SetScalarParameterValue(Param_PixelTextureHeight, static_cast<float>(TexHeight));
 
-	// Also send as vector for convenience
 	MaterialInstance->SetVectorParameterValue(
 		Param_PixelTextureSize,
 		FLinearColor(static_cast<float>(TexWidth), static_cast<float>(TexHeight), 0.0f, 0.0f)
@@ -177,11 +163,8 @@ bool FPixelComponentMaterialLibrary::SendSliceUVToMaterial(
 		return false;
 	}
 
-	// Get UV rect - will return full UVs (0,0,1,1) if slice not found or empty
 	const FPixelUVRect UVRect = Asset->GetSliceNormalizedUVRect(SliceName);
 
-	// Always send UV parameters, even if using fallback (0,0,1,1)
-	// This ensures the image renders correctly even without slice data
 	MaterialInstance->SetVectorParameterValue(
 		Param_SliceUVRect,
 		FLinearColor(UVRect.MinX, UVRect.MinY, UVRect.MaxX, UVRect.MaxY)
@@ -222,7 +205,7 @@ bool FPixelComponentMaterialLibrary::SendNineSliceCenterUVToMaterial(
 			FLinearColor(CenterUVs.MinX, CenterUVs.MinY, CenterUVs.MaxX, CenterUVs.MaxY)
 		);
 
-		UE_LOG(LogPixelComponentMaterial, Verbose, 
+		UE_LOG(LogPixelComponentMaterial, Verbose,
 			TEXT("Sent 9-slice center UVs for '%s': (%.4f, %.4f) - (%.4f, %.4f)"),
 			*SliceName, CenterUVs.MinX, CenterUVs.MinY, CenterUVs.MaxX, CenterUVs.MaxY);
 
@@ -243,15 +226,13 @@ int32 FPixelComponentMaterialLibrary::SendAllSliceUVsAsBatch(
 	}
 
 	const TArray<FVector4f> UVs = Asset->GetAllSliceUVsAsVector4();
-	
+
 	if (UVs.Num() == 0)
 	{
 		UE_LOG(LogPixelComponentMaterial, Warning, TEXT("No valid slice UVs to send"));
 		return 0;
 	}
 
-	// Note: SetVectorArrayParameterValue is not available in all UE versions
-	// For now, send individual parameters with indexed names
 	int32 Count = 0;
 	for (const FVector4f& UV : UVs)
 	{
@@ -260,7 +241,7 @@ int32 FPixelComponentMaterialLibrary::SendAllSliceUVsAsBatch(
 		Count++;
 	}
 
-	UE_LOG(LogPixelComponentMaterial, Log, 
+	UE_LOG(LogPixelComponentMaterial, Log,
 		TEXT("Sent batch slice UVs: %d slices to parameter '%s'"), UVs.Num(), *ParameterName.ToString());
 
 	return Count;
@@ -281,16 +262,14 @@ int32 FPixelComponentMaterialLibrary::SendLayerColorsToMaterial(
 
 	for (const FLayerMetadata& Layer : Layers)
 	{
-		// Check if layer has a material parameter mapping
 		const FName* ParamName = LayerMap.Find(Layer.Name);
 		FName TargetParam = ParamName ? *ParamName : *Layer.Name;
 
-		// Convert FColor to FLinearColor for material parameter
 		const FLinearColor LayerColor = Layer.UserDataColor.ReinterpretAsLinear();
 		MaterialInstance->SetVectorParameterValue(TargetParam, LayerColor);
 		LayersSet++;
 
-		UE_LOG(LogPixelComponentMaterial, Verbose, 
+		UE_LOG(LogPixelComponentMaterial, Verbose,
 			TEXT("Sent layer color for '%s' -> parameter '%s'"), *Layer.Name, *TargetParam.ToString());
 	}
 
@@ -308,7 +287,7 @@ bool FPixelComponentMaterialLibrary::SendPivotToMaterial(
 	}
 
 	FPixelPivot Pivot;
-	
+
 	if (!SliceName.IsEmpty())
 	{
 		Pivot = Asset->GetSlicePivot(SliceName);
@@ -321,7 +300,6 @@ bool FPixelComponentMaterialLibrary::SendPivotToMaterial(
 	int32 TexWidth, TexHeight;
 	Asset->GetTextureDimensions(TexWidth, TexHeight);
 
-	// Get normalized pivot
 	FVector2f NormalizedPivot = Pivot.GetNormalized(TexWidth, TexHeight);
 
 	MaterialInstance->SetVectorParameterValue(
@@ -329,7 +307,7 @@ bool FPixelComponentMaterialLibrary::SendPivotToMaterial(
 		FLinearColor(NormalizedPivot.X, NormalizedPivot.Y, 0.0f, 0.0f)
 	);
 
-	UE_LOG(LogPixelComponentMaterial, Verbose, 
+	UE_LOG(LogPixelComponentMaterial, Verbose,
 		TEXT("Sent pivot: (%.4f, %.4f)"), NormalizedPivot.X, NormalizedPivot.Y);
 
 	return true;
@@ -345,7 +323,6 @@ int32 FPixelComponentMaterialLibrary::ApplyPaletteProfile(
 		return 0;
 	}
 
-	// Get the palette profile from the asset
 	bool bFound = false;
 	FPixelPaletteProfile Profile = Asset->GetPaletteProfile(ProfileName.ToString(), bFound);
 
@@ -357,13 +334,11 @@ int32 FPixelComponentMaterialLibrary::ApplyPaletteProfile(
 
 	int32 ColorsSet = 0;
 
-	// Apply all color overrides from the profile
 	for (const auto& OverridePair : Profile.ColorOverrides)
 	{
 		const FName& LayerName = OverridePair.Key;
 		const FLinearColor& Color = OverridePair.Value;
 
-		// Set color parameter with prefixed name
 		const FName ParamName = *FString::Printf(TEXT("%sColor_%s"), *Param_Prefix.ToString(), *LayerName.ToString());
 		MaterialInstance->SetVectorParameterValue(ParamName, Color);
 		ColorsSet++;
@@ -373,12 +348,8 @@ int32 FPixelComponentMaterialLibrary::ApplyPaletteProfile(
 			*LayerName.ToString(), Color.R, Color.G, Color.B, Color.A);
 	}
 
-	// Apply grayscale mapping (send as texture or array if needed)
-	// For efficiency, only send if grayscale map has been customized
 	if (Profile.GrayscaleMap.Num() > 0)
 	{
-		// Send first few grayscale values as sample parameters
-		// For full grayscale support, use a texture parameter
 		const int32 SampleCount = FMath::Min(8, Profile.GrayscaleMap.Num());
 		for (int32 i = 0; i < SampleCount; i++)
 		{
@@ -407,20 +378,16 @@ bool FPixelComponentMaterialLibrary::InjectGlobalSettings(
 		return false;
 	}
 
-	// Send GlobalPixelScale
 	const float GlobalPixelScale = static_cast<float>(Settings->GlobalPixelSize);
 	MaterialInstance->SetScalarParameterValue(Param_GlobalPixelScale, GlobalPixelScale);
 
-	// Send VirtualResolution (if configured in settings)
-	// For now, use texture dimensions as virtual resolution
-	// This can be extended with a dedicated VirtualResolution setting
-	const FVector2f VirtualRes(1920.0f, 1080.0f); // Default HD
+	const FVector2f VirtualRes(1920.0f, 1080.0f);
 	MaterialInstance->SetVectorParameterValue(
 		Param_VirtualResolution,
 		FLinearColor(VirtualRes.X, VirtualRes.Y, 0.0f, 0.0f)
 	);
 
-	UE_LOG(LogPixelComponentMaterial, Verbose, 
+	UE_LOG(LogPixelComponentMaterial, Verbose,
 		TEXT("Injected global settings: PixelScale=%.2f"), GlobalPixelScale);
 
 	return true;

@@ -10,22 +10,25 @@
 /**
  * UPixelComponentAsset
  *
- * Data asset representing an imported Aseprite pixel art file.
- * Contains texture reference, slice data (including 9-slice margins),
- * layer metadata, and animation information.
+ * Data asset representing pixel art imported from Aseprite or standard image files.
+ * Stores texture references, slice definitions, 9-slice margins, layer metadata,
+ * animation sequences, and palette profiles for dynamic recoloring.
  *
- * This asset is created automatically by UPixelComponentFactory when
- * importing .json files exported from Aseprite.
+ * Import Methods:
+ * - JSON Import: UPixelComponentFactory parses Aseprite JSON exports with full metadata
+ * - PNG Import: Direct texture import creates asset with default "FullTexture" slice
  *
- * Global Settings:
- * - Asset dimensions and UV calculations are affected by UPixelComponentSettings::GlobalPixelSize
- * - Use GetEffectiveTextureDimensions() to get dimensions after global pixel size scaling
+ * Features:
+ * - Pre-calculated normalized UV coordinates (0-1 range) for all slices
+ * - 9-slice margin support for scalable UI elements without distortion
+ * - Animation sequence data from Aseprite frame tags
+ * - Palette profiles for runtime color overrides and material instancing
+ * - Pivot point definitions for consistent transformation anchors
  *
- * HD Pixel Art Features:
- * - Pre-calculated normalized UVs (FPixelUVRect) for all slices
- * - Animation sequences from Aseprite frame tags
- * - Layer to material parameter mapping
- * - Pivot points for consistent transformation
+ * Global Settings Integration:
+ * - Texture dimensions scale according to UPixelComponentSettings::GlobalPixelSize
+ * - Use GetEffectiveTextureDimensions() for scaled dimensions
+ * - Use GetOriginalTextureDimensions() for source dimensions
  */
 UCLASS(BlueprintType, Category = "Pixel Component", meta = (DisplayName = "Pixel Component Asset", DisplayCategory = "Pixel Component"))
 class PIXELCOMPONENT_API UPixelComponentAsset : public UDataAsset
@@ -40,35 +43,36 @@ public:
 	// ========================================================================
 
 	/**
-	 * Get the source texture for this pixel art asset.
-	 * @return Pointer to the source texture (may be null if not linked)
+	 * Retrieves the source texture referenced by this asset.
+	 * @return Pointer to UTexture2D, or nullptr if no texture is assigned
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	UTexture2D* GetSourceTexture() const { return SourceTexture; }
 
 	/**
-	 * Set the source texture for this asset.
+	 * Assigns a source texture to this asset and recalculates UV coordinates.
 	 * @param NewTexture The texture to associate with this asset
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	void SetSourceTexture(UTexture2D* NewTexture);
 
 	/**
-	 * Check if this asset has a valid source texture.
-	 * @return true if SourceTexture is valid and non-null
+	 * Validates whether the asset has a valid source texture assigned.
+	 * @return true if SourceTexture is non-null, false otherwise
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	bool HasValidTexture() const { return SourceTexture != nullptr; }
 
 	/**
-	 * Get the asset name from Aseprite metadata.
+	 * Retrieves the asset name from Aseprite metadata or import filename.
+	 * @return Reference to the asset name string
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	const FString& GetAssetName() const { return AssetName; }
 
 	/**
-	 * Set the asset name.
-	 * @param NewName The new asset name
+	 * Sets a custom name for this asset.
+	 * @param NewName The new asset name to assign
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	void SetAssetName(const FString& NewName) { AssetName = NewName; }
@@ -78,25 +82,25 @@ public:
 	// ========================================================================
 
 	/**
-	 * Get all slices defined in this asset.
-	 * @return Array of slice data
+	 * Retrieves all slice definitions contained in this asset.
+	 * @return Constant reference to array of FSliceData structures
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	const TArray<FSliceData>& GetSlices() const { return Slices; }
 
 	/**
-	 * Get a specific slice by name.
-	 * @param SliceName Name of the slice to find
-	 * @return Pointer to slice data, or nullptr if not found
-	 * @deprecated Use GetSliceByName instead for Blueprint compatibility
+	 * Locates a slice by name. Internal use only.
+	 * @param SliceName Name identifier of the slice to locate
+	 * @return Pointer to FSliceData, or nullptr if not found
+	 * @deprecated Use GetSliceByName() for Blueprint compatibility
 	 */
 	const FSliceData* FindSliceByName(const FString& SliceName) const;
 
 	/**
-	 * Get a specific slice by name (Blueprint-safe version).
-	 * @param SliceName Name of the slice to find
-	 * @param bFound Output: true if slice was found
-	 * @return Slice data (invalid struct if not found)
+	 * Retrieves a slice definition by name with Blueprint support.
+	 * @param SliceName Name identifier of the slice to locate
+	 * @param bFound Output parameter indicating whether slice was found
+	 * @return FSliceData structure containing slice definition, or invalid struct if not found
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	FSliceData GetSliceByName(const FString& SliceName, bool& bFound) const;
@@ -159,43 +163,43 @@ public:
 	// ========================================================================
 
 	/**
-	 * Get all palette profile names.
-	 * @return Array of profile names
+	 * Retrieves all palette profile names defined in this asset.
+	 * @return Array of profile name strings
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
 	TArray<FString> GetAllPaletteProfileNames() const;
 
 	/**
-	 * Get a palette profile by name.
-	 * @param ProfileName Name of the palette profile
-	 * @param bFound Output: true if profile was found
-	 * @return Palette profile data (invalid struct if not found)
+	 * Retrieves a palette profile definition by name.
+	 * @param ProfileName Name identifier of the palette profile
+	 * @param bFound Output parameter indicating whether profile exists
+	 * @return FPixelPaletteProfile structure, or invalid struct if not found
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
 	FPixelPaletteProfile GetPaletteProfile(const FString& ProfileName, bool& bFound) const;
 
 	/**
-	 * Add or update a palette profile.
-	 * @param ProfileName Name of the palette profile
-	 * @param Profile Profile data to store
+	 * Creates or updates a palette profile with the specified definition.
+	 * @param ProfileName Name identifier for the palette profile
+	 * @param Profile FPixelPaletteProfile structure containing color mappings
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
 	void SetPaletteProfile(const FString& ProfileName, const FPixelPaletteProfile& Profile);
 
 	/**
-	 * Remove a palette profile.
-	 * @param ProfileName Name of the profile to remove
-	 * @return true if profile was removed
+	 * Removes a palette profile from this asset.
+	 * @param ProfileName Name identifier of the profile to remove
+	 * @return true if profile was removed, false if profile did not exist
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
 	bool RemovePaletteProfile(const FString& ProfileName);
 
 	/**
-	 * Get color override for a layer from a specific profile.
-	 * @param ProfileName Name of the palette profile
-	 * @param LayerName Name of the layer
-	 * @param bFound Output: true if override exists
-	 * @return Override color or White if not found
+	 * Retrieves a color override value from a specific palette profile.
+	 * @param ProfileName Name identifier of the palette profile
+	 * @param LayerName Name identifier of the layer or color index
+	 * @param bFound Output parameter indicating whether override exists
+	 * @return FLinearColor override value, or White if not found
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
 	FLinearColor GetColorOverrideFromProfile(const FString& ProfileName, const FName& LayerName, bool& bFound) const;

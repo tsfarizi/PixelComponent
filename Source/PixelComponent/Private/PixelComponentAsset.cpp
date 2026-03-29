@@ -9,7 +9,7 @@ DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentAsset, Log, All);
 UPixelComponentAsset::UPixelComponentAsset()
 	: SourceTexture(nullptr)
 	, NineSliceMargins(0.0f)
-	, DefaultPivot(0.0f, 0.0f, true) // Center pivot by default
+	, DefaultPivot(0.0f, 0.0f, true)
 	, CachedTextureWidth(0)
 	, CachedTextureHeight(0)
 	, OriginalTextureWidth(0)
@@ -55,12 +55,12 @@ TArray<FString> UPixelComponentAsset::GetAllSliceNames() const
 {
 	TArray<FString> Names;
 	Names.Reserve(Slices.Num());
-	
+
 	for (const FSliceData& Slice : Slices)
 	{
 		Names.Add(Slice.Name);
 	}
-	
+
 	return Names;
 }
 
@@ -87,10 +87,6 @@ void UPixelComponentAsset::SetLayerMaterialMapping(const FString& LayerName, con
 		LayerToMaterialParamMap.Add(LayerName, ParamName);
 	}
 }
-
-// ========================================================================
-// Palette Profile Access
-// ========================================================================
 
 TArray<FString> UPixelComponentAsset::GetAllPaletteProfileNames() const
 {
@@ -142,10 +138,6 @@ FLinearColor UPixelComponentAsset::GetColorOverrideFromProfile(const FString& Pr
 	return FLinearColor::White;
 }
 
-// ========================================================================
-// 9-Slice Data
-// ========================================================================
-
 FPixelNineSliceMargins UPixelComponentAsset::GetSliceNineSliceMarginsUV(const FString& SliceName) const
 {
 	const FSliceData* Slice = FindSliceByName(SliceName);
@@ -164,14 +156,12 @@ void UPixelComponentAsset::GetTextureDimensions(int32& OutWidth, int32& OutHeigh
 
 void UPixelComponentAsset::GetEffectiveTextureDimensions(int32& OutWidth, int32& OutHeight) const
 {
-	// Return dimensions after applying global pixel size scaling
 	OutWidth = CachedTextureWidth;
 	OutHeight = CachedTextureHeight;
 }
 
 void UPixelComponentAsset::GetOriginalTextureDimensions(int32& OutWidth, int32& OutHeight) const
 {
-	// Return original dimensions before any scaling
 	if (OriginalTextureWidth > 0 && OriginalTextureHeight > 0)
 	{
 		OutWidth = OriginalTextureWidth;
@@ -196,7 +186,6 @@ int32 UPixelComponentAsset::GetGlobalPixelSize()
 
 FPixelUVRect UPixelComponentAsset::ComputeNormalizedUVs(const FPixelRect& PixelRect) const
 {
-	// Use SourceTexture dimensions if available for dynamic UV calculation
 	int32 TexWidth = CachedTextureWidth;
 	int32 TexHeight = CachedTextureHeight;
 
@@ -212,7 +201,6 @@ FPixelUVRect UPixelComponentAsset::ComputeNormalizedUVs(const FPixelRect& PixelR
 
 FPixelUVRect UPixelComponentAsset::GetSliceNormalizedUVRect(const FString& SliceName) const
 {
-	// Fallback: If SliceName is empty or asset has no slices, return full texture UVs
 	if (SliceName.IsEmpty() || Slices.Num() == 0)
 	{
 		return FPixelUVRect(0.0f, 0.0f, 1.0f, 1.0f);
@@ -224,7 +212,6 @@ FPixelUVRect UPixelComponentAsset::GetSliceNormalizedUVRect(const FString& Slice
 		return Slice->NormalizedUVRect;
 	}
 
-	// Fallback: If slice not found, return full texture UVs
 	UE_LOG(LogPixelComponentAsset, Warning, TEXT("Slice '%s' not found, returning full UVs"), *SliceName);
 	return FPixelUVRect(0.0f, 0.0f, 1.0f, 1.0f);
 }
@@ -243,7 +230,7 @@ TArray<FVector4f> UPixelComponentAsset::GetAllSliceUVsAsVector4() const
 {
 	TArray<FVector4f> UVs;
 	UVs.Reserve(Slices.Num());
-	
+
 	for (const FSliceData& Slice : Slices)
 	{
 		if (Slice.NormalizedUVRect.IsValid())
@@ -256,7 +243,7 @@ TArray<FVector4f> UPixelComponentAsset::GetAllSliceUVsAsVector4() const
 			));
 		}
 	}
-	
+
 	return UVs;
 }
 
@@ -303,7 +290,6 @@ void UPixelComponentAsset::RefreshNormalizedUVs()
 {
 	UpdateTextureDimensionsCache();
 
-	// Use SourceTexture dimensions if available for dynamic UV calculation
 	int32 TexWidth = CachedTextureWidth;
 	int32 TexHeight = CachedTextureHeight;
 
@@ -321,13 +307,11 @@ void UPixelComponentAsset::RefreshNormalizedUVs()
 		return;
 	}
 
-	// Compute UVs for all slices using effective (scaled) dimensions
 	for (FSliceData& Slice : Slices)
 	{
 		Slice.ComputeNormalizedUVs(TexWidth, TexHeight);
 	}
 
-	// Compute UVs for all frames
 	for (FFrameData& Frame : Frames)
 	{
 		Frame.ComputeNormalizedUVs(TexWidth, TexHeight);
@@ -335,7 +319,6 @@ void UPixelComponentAsset::RefreshNormalizedUVs()
 
 	bUVsComputed = true;
 
-	// Validate UVs
 	if (!ValidateUVs())
 	{
 		UE_LOG(LogPixelComponentAsset, Error, TEXT("UV validation failed for asset %s"), *GetPathName());
@@ -349,20 +332,16 @@ bool UPixelComponentAsset::ValidateAsset() const
 {
 	bool bValid = true;
 
-	// Validate texture
 	if (!SourceTexture)
 	{
 		UE_LOG(LogPixelComponentAsset, Warning, TEXT("Asset %s has no source texture"), *GetPathName());
-		// Not necessarily invalid - texture might be loaded later
 	}
 
-	// Validate UVs
 	if (!ValidateUVs())
 	{
 		bValid = false;
 	}
 
-	// Validate slices
 	for (const FSliceData& Slice : Slices)
 	{
 		if (!Slice.Validate(CachedTextureWidth, CachedTextureHeight))
@@ -372,7 +351,6 @@ bool UPixelComponentAsset::ValidateAsset() const
 		}
 	}
 
-	// Validate animation sequences
 	for (const auto& SeqPair : AnimationSequences)
 	{
 		if (!SeqPair.Value.Validate(Frames.Num() - 1))
@@ -393,9 +371,9 @@ bool UPixelComponentAsset::ValidateUVs() const
 	{
 		if (!Slice.NormalizedUVRect.IsValid())
 		{
-			UE_LOG(LogPixelComponentAsset, Error, 
+			UE_LOG(LogPixelComponentAsset, Error,
 				TEXT("Slice '%s' has invalid UVs: (%.4f, %.4f, %.4f, %.4f)"),
-				*Slice.Name, 
+				*Slice.Name,
 				Slice.NormalizedUVRect.MinX, Slice.NormalizedUVRect.MinY,
 				Slice.NormalizedUVRect.MaxX, Slice.NormalizedUVRect.MaxY);
 			bAllValid = false;
@@ -414,15 +392,12 @@ FAsepriteParseResult UPixelComponentAsset::ParseMetadataFromJson(const TSharedPt
 		return FAsepriteParseResult::Error(TEXT("Invalid JSON object for metadata parsing"));
 	}
 
-	// Parse asset name from meta
 	const TSharedPtr<FJsonObject>* MetaObject;
 	if (JsonObject->TryGetObjectField(TEXT("meta"), MetaObject) && MetaObject)
 	{
-		// Get asset name from image field or use default
 		FString ImagePath;
 		if ((*MetaObject)->TryGetStringField(TEXT("image"), ImagePath))
 		{
-			// Extract filename without path and extension
 			AssetName = FPaths::GetBaseFilename(ImagePath);
 		}
 		else
@@ -430,7 +405,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseMetadataFromJson(const TSharedPt
 			AssetName = TEXT("UnnamedPixelArt");
 		}
 
-		// Parse default pivot if available in userData
 		const TSharedPtr<FJsonObject>* UserDataObject;
 		if ((*MetaObject)->TryGetObjectField(TEXT("userData"), UserDataObject) && UserDataObject)
 		{
@@ -454,11 +428,9 @@ FAsepriteParseResult UPixelComponentAsset::ParseSlicesFromJson(const TSharedPtr<
 		return FAsepriteParseResult::Error(TEXT("Invalid JSON object for slice parsing"));
 	}
 
-	// Get the "slices" array from Aseprite JSON
 	const TArray<TSharedPtr<FJsonValue>>* SlicesArray;
 	if (!JsonObject->TryGetArrayField(TEXT("slices"), SlicesArray))
 	{
-		// No slices is not necessarily an error - some sprites don't have slices
 		UE_LOG(LogPixelComponentAsset, Verbose, TEXT("No slices found in JSON"));
 		return Result;
 	}
@@ -476,7 +448,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseSlicesFromJson(const TSharedPtr<
 
 		FSliceData Slice;
 
-		// Parse slice name
 		FString SliceName;
 		if (SliceObject->TryGetStringField(TEXT("name"), SliceName))
 		{
@@ -488,7 +459,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseSlicesFromJson(const TSharedPtr<
 			continue;
 		}
 
-		// Parse the "bounds" object for pixel rectangle
 		const TSharedPtr<FJsonObject>* BoundsObject;
 		if (SliceObject->TryGetObjectField(TEXT("bounds"), BoundsObject) && BoundsObject)
 		{
@@ -512,11 +482,9 @@ FAsepriteParseResult UPixelComponentAsset::ParseSlicesFromJson(const TSharedPtr<
 			continue;
 		}
 
-		// Parse slice color
 		FString ColorStr;
 		if (SliceObject->TryGetStringField(TEXT("color"), ColorStr))
 		{
-			// Parse Aseprite color tags
 			if (ColorStr == TEXT("#ff0000") || ColorStr == TEXT("red"))
 			{
 				Slice.SliceColor = FColor::Red;
@@ -535,35 +503,28 @@ FAsepriteParseResult UPixelComponentAsset::ParseSlicesFromJson(const TSharedPtr<
 			}
 		}
 
-		// Check for 9-slice data in the "keys" array
 		const TArray<TSharedPtr<FJsonValue>>* KeysArray;
 		if (SliceObject->TryGetArrayField(TEXT("keys"), KeysArray) && KeysArray->Num() > 0)
 		{
-			// Check the first key for 9-slice information
 			const TSharedPtr<FJsonObject> FirstKey = (*KeysArray)[0]->AsObject();
 			if (FirstKey && FirstKey)
 			{
-				// Look for "bounds" in the key that indicates 9-slice
 				const TSharedPtr<FJsonObject>* KeyBoundsObject;
 				if (FirstKey->TryGetObjectField(TEXT("bounds"), KeyBoundsObject) && KeyBoundsObject)
 				{
-					// This slice has 9-slice data
 					Slice.bIsNineSlice = true;
-					
-					// Extract 9-slice margins from key bounds
+
 					int32 KeyX, KeyY, KeyW, KeyH;
 					if ((*KeyBoundsObject)->TryGetNumberField(TEXT("x"), KeyX) &&
 						(*KeyBoundsObject)->TryGetNumberField(TEXT("y"), KeyY) &&
 						(*KeyBoundsObject)->TryGetNumberField(TEXT("w"), KeyW) &&
 						(*KeyBoundsObject)->TryGetNumberField(TEXT("h"), KeyH))
 					{
-						// Calculate margins from the difference between slice bounds and key bounds
 						const int32 LeftMargin = KeyX - Slice.PixelRect.X;
 						const int32 TopMargin = KeyY - Slice.PixelRect.Y;
 						const int32 RightMargin = (Slice.PixelRect.X + Slice.PixelRect.Width) - (KeyX + KeyW);
 						const int32 BottomMargin = (Slice.PixelRect.Y + Slice.PixelRect.Height) - (KeyY + KeyH);
 
-						// Store in UV space for HD pipeline
 						Slice.NineSliceMarginsUV = FPixelNineSliceMargins::FromPixelMargins(
 							static_cast<float>(LeftMargin),
 							static_cast<float>(TopMargin),
@@ -573,7 +534,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseSlicesFromJson(const TSharedPtr<
 							Slice.PixelRect.Height
 						);
 
-						// Also store in pixel margins for legacy compatibility
 						NineSliceMargins = FMargin(
 							static_cast<float>(LeftMargin),
 							static_cast<float>(TopMargin),
@@ -581,7 +541,7 @@ FAsepriteParseResult UPixelComponentAsset::ParseSlicesFromJson(const TSharedPtr<
 							static_cast<float>(BottomMargin)
 						);
 
-						UE_LOG(LogPixelComponentAsset, Verbose, 
+						UE_LOG(LogPixelComponentAsset, Verbose,
 							TEXT("Parsed 9-slice for '%s': L=%d, T=%d, R=%d, B=%d"),
 							*Slice.Name, LeftMargin, TopMargin, RightMargin, BottomMargin);
 					}
@@ -606,7 +566,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseLayersFromJson(const TSharedPtr<
 		return FAsepriteParseResult::Error(TEXT("Invalid JSON object for layer parsing"));
 	}
 
-	// Get the "layers" array from Aseprite JSON
 	const TArray<TSharedPtr<FJsonValue>>* LayersArray;
 	if (!JsonObject->TryGetArrayField(TEXT("layers"), LayersArray))
 	{
@@ -629,55 +588,47 @@ FAsepriteParseResult UPixelComponentAsset::ParseLayersFromJson(const TSharedPtr<
 		FLayerMetadata Layer;
 		Layer.LayerIndex = LayerIdx;
 
-		// Parse layer name
 		FString LayerName;
 		if (LayerObject->TryGetStringField(TEXT("name"), LayerName))
 		{
 			Layer.Name = LayerName;
 		}
 
-		// Parse visibility
 		bool bVisible = true;
 		if (LayerObject->TryGetBoolField(TEXT("show"), bVisible))
 		{
 			Layer.bVisible = bVisible;
 		}
 
-		// Parse opacity (0-255 in Aseprite, convert to 0-1)
 		int32 OpacityInt = 255;
 		if (LayerObject->TryGetNumberField(TEXT("opacity"), OpacityInt))
 		{
 			Layer.Opacity = FMath::Clamp(OpacityInt / 255.0f, 0.0f, 1.0f);
 		}
 
-		// Parse blend mode
 		FString BlendMode;
 		if (LayerObject->TryGetStringField(TEXT("blendMode"), BlendMode))
 		{
 			Layer.BlendMode = BlendMode;
 		}
 
-		// Parse parent layer (for nested layers)
 		FString ParentName;
 		if (LayerObject->TryGetStringField(TEXT("parent"), ParentName))
 		{
 			Layer.ParentLayerName = ParentName;
 		}
 
-		// Parse user data color (optional)
 		const TSharedPtr<FJsonObject>* UserDataObject;
 		if (LayerObject->TryGetObjectField(TEXT("userData"), UserDataObject) && UserDataObject)
 		{
 			FString UserDataColorStr;
 			if ((*UserDataObject)->TryGetStringField(TEXT("color"), UserDataColorStr))
 			{
-				// Parse hex color if present
 				if (UserDataColorStr.StartsWith(TEXT("#")))
 				{
 					UserDataColorStr = UserDataColorStr.RightChop(1);
 					if (UserDataColorStr.Len() >= 6)
 					{
-						// Parse hex color manually
 						uint32 ColorValue = 0;
 						for (int32 i = 0; i < 6 && i < UserDataColorStr.Len(); i++)
 						{
@@ -716,7 +667,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 		return FAsepriteParseResult::Error(TEXT("Invalid JSON object for animation parsing"));
 	}
 
-	// Parse animation tags (frameTags in Aseprite JSON)
 	const TArray<TSharedPtr<FJsonValue>>* TagsArray;
 	if (JsonObject->TryGetArrayField(TEXT("frameTags"), TagsArray))
 	{
@@ -732,7 +682,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 
 			FPixelAnimSequence Sequence;
 
-			// Parse tag name
 			FString TagName;
 			if (TagObject->TryGetStringField(TEXT("name"), TagName))
 			{
@@ -744,7 +693,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 				continue;
 			}
 
-			// Parse from/to frames
 			int32 FromFrame = 0;
 			int32 ToFrame = 0;
 			if (TagObject->TryGetNumberField(TEXT("from"), FromFrame))
@@ -756,7 +704,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 				Sequence.EndFrame = ToFrame;
 			}
 
-			// Parse direction
 			FString DirectionStr;
 			if (TagObject->TryGetStringField(TEXT("direction"), DirectionStr))
 			{
@@ -778,17 +725,14 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 				}
 			}
 
-			// Parse repeat count
 			int32 Repeat = 0;
 			if (TagObject->TryGetNumberField(TEXT("repeat"), Repeat))
 			{
 				Sequence.LoopCount = Repeat;
 			}
 
-			// Calculate duration
 			Sequence.CalculateDuration();
 
-			// Validate
 			if (!Sequence.Validate(Frames.Num() - 1))
 			{
 				Result.AddWarning(FString::Printf(TEXT("Animation sequence '%s' has invalid frame range"), *TagName));
@@ -800,7 +744,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 		}
 	}
 
-	// Parse frame data
 	const TArray<TSharedPtr<FJsonValue>>* FramesArray;
 	if (JsonObject->TryGetArrayField(TEXT("frames"), FramesArray))
 	{
@@ -809,8 +752,7 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 		for (int32 FrameIndex = 0; FrameIndex < FramesArray->Num(); ++FrameIndex)
 		{
 			const TSharedPtr<FJsonValue>& FrameValue = (*FramesArray)[FrameIndex];
-			
-			// Aseprite JSON can have frames as array of objects or object with frame data
+
 			const TSharedPtr<FJsonObject> FrameObject = FrameValue->AsObject();
 			if (!FrameObject)
 			{
@@ -820,7 +762,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 			FFrameData Frame;
 			Frame.FrameIndex = FrameIndex;
 
-			// Parse duration - can be direct number or nested object
 			int32 DurationMs = 100;
 			if (FrameObject->TryGetNumberField(TEXT("duration"), DurationMs))
 			{
@@ -828,7 +769,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 			}
 			else
 			{
-				// Try nested duration object
 				const TSharedPtr<FJsonObject>* DurationObject;
 				if (FrameObject->TryGetObjectField(TEXT("duration"), DurationObject))
 				{
@@ -837,7 +777,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 				}
 			}
 
-			// Parse frame rectangle (for sprite sheets)
 			const TSharedPtr<FJsonObject>* FrameRectObject;
 			if (FrameObject->TryGetObjectField(TEXT("frame"), FrameRectObject) && FrameRectObject)
 			{
@@ -857,7 +796,6 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 		UE_LOG(LogPixelComponentAsset, Verbose, TEXT("Parsed %d frames"), Frames.Num());
 	}
 
-	// Also parse legacy animation tags for compatibility
 	if (JsonObject->TryGetArrayField(TEXT("tags"), TagsArray))
 	{
 		AnimationTags.Empty(TagsArray->Num());
@@ -872,7 +810,7 @@ FAsepriteParseResult UPixelComponentAsset::ParseAnimationFromJson(const TSharedP
 
 			FAnimationTag Tag;
 			TagObject->TryGetStringField(TEXT("name"), Tag.Name);
-			
+
 			int32 FromFrame = 0;
 			int32 ToFrame = 0;
 			TagObject->TryGetNumberField(TEXT("from"), FromFrame);
@@ -897,15 +835,12 @@ void UPixelComponentAsset::UpdateTextureDimensionsCache()
 		const int32 SurfaceWidth = SourceTexture->GetSurfaceWidth();
 		const int32 SurfaceHeight = SourceTexture->GetSurfaceHeight();
 
-		// Store original dimensions
 		OriginalTextureWidth = SurfaceWidth;
 		OriginalTextureHeight = SurfaceHeight;
 
-		// Apply global pixel size scaling
 		UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
 		if (Settings && Settings->bEnableAutoScaleOnImport)
 		{
-			// Calculate scale factor based on original dimensions
 			AppliedScaleFactor = UPixelComponentSettings::CalculateScaleFactor(FMath::Max(SurfaceWidth, SurfaceHeight));
 			bIsScaled = !FMath::IsNearlyEqual(AppliedScaleFactor, 1.0f);
 
@@ -929,7 +864,6 @@ void UPixelComponentAsset::UpdateTextureDimensionsCache()
 	}
 	else
 	{
-		// Try to get dimensions from import settings or default to 0
 		CachedTextureWidth = 0;
 		CachedTextureHeight = 0;
 		OriginalTextureWidth = 0;
@@ -977,7 +911,3 @@ void UPixelComponentAsset::SetScalingFromImport(float InScaleFactor, bool InbIsS
 	AppliedScaleFactor = InScaleFactor;
 	bIsScaled = InbIsScaled;
 }
-
-
-
-

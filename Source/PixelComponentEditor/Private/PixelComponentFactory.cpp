@@ -16,14 +16,12 @@ DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentFactory, Log, All);
 
 UPixelComponentFactory::UPixelComponentFactory()
 {
-	// Configure factory for .json and .png files
 	SupportedExtensions.Add(TEXT("json"));
 	SupportedExtensions.Add(TEXT("png"));
 
 	bEditorImport = true;
-	bText = true;  // JSON is text, but we'll handle PNG in FactoryCreateBinary
+	bText = true;
 
-	// Set supported class to PixelComponentAsset
 	SupportedClass = UPixelComponentAsset::StaticClass();
 }
 
@@ -44,7 +42,6 @@ UObject* UPixelComponentFactory::FactoryCreateText(
 	const TCHAR* BufferEnd,
 	FFeedbackContext* Warn)
 {
-	// Get the file path from the import context
 	const FString CurrentFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
 	const FString FileContent = FString(BufferEnd - Buffer, Buffer);
 
@@ -54,13 +51,10 @@ UObject* UPixelComponentFactory::FactoryCreateText(
 
 	if (Asset)
 	{
-		// Try to link the source texture automatically
 		FindAndLinkSourceTexture(CurrentFilename, Asset, Warn);
 
-		// Refresh UV calculations after texture is linked
 		Asset->RefreshNormalizedUVs();
 
-		// Validate the asset
 		if (!Asset->ValidateAsset())
 		{
 			UE_LOG(LogPixelComponentFactory, Warning, TEXT("Asset %s has validation issues"), *InName.ToString());
@@ -88,23 +82,19 @@ UObject* UPixelComponentFactory::FactoryCreateBinary(
 	const uint8* BufferEnd,
 	FFeedbackContext* Warn)
 {
-	// Get the file path from the import context
 	const FString CurrentFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
 	const FString Extension = FPaths::GetExtension(CurrentFilename).ToLower();
 
 	UE_LOG(LogPixelComponentFactory, Log, TEXT("Importing PixelComponentAsset (Binary): %s"), *InName.ToString());
 
-	// Handle PNG import
 	if (Extension == TEXT("png"))
 	{
 		UPixelComponentAsset* Asset = CreateAssetFromPNG(InParent, InName, CurrentFilename, Warn);
 
 		if (Asset)
 		{
-			// Refresh UV calculations after texture is linked
 			Asset->RefreshNormalizedUVs();
 
-			// Validate the asset
 			if (!Asset->ValidateAsset())
 			{
 				UE_LOG(LogPixelComponentFactory, Warning, TEXT("Asset %s has validation issues"), *InName.ToString());
@@ -134,16 +124,13 @@ UPixelComponentAsset* UPixelComponentFactory::CreateAssetFromPNG(
 		return nullptr;
 	}
 
-	// Create the asset
 	UPixelComponentAsset* Asset = NewObject<UPixelComponentAsset>(InParent, InName, RF_Public | RF_Standalone);
 	Asset->AddToRoot();
 
-	// Set asset name from filename
 	Asset->SetAssetName(FPaths::GetBaseFilename(TexturePath));
 
 	UE_LOG(LogPixelComponentFactory, Log, TEXT("Creating asset from PNG: %s"), *TexturePath);
 
-	// Convert to Unreal package path
 	FString FullPath = FPaths::ConvertRelativePathToFull(TexturePath);
 	FString RelativePath = FullPath;
 	FPaths::MakePathRelativeTo(RelativePath, *FPaths::ProjectContentDir());
@@ -151,12 +138,10 @@ UPixelComponentAsset* UPixelComponentFactory::CreateAssetFromPNG(
 
 	UE_LOG(LogPixelComponentFactory, Log, TEXT("Loading texture from package path: %s"), *AssetPath);
 
-	// Try to find existing loaded object first
 	UObject* ExistingObject = FindObject<UObject>(nullptr, *AssetPath);
 
 	if (!ExistingObject)
 	{
-		// Try to load from disk using StaticLoadObject
 		ExistingObject = StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AssetPath);
 	}
 
@@ -170,20 +155,16 @@ UPixelComponentAsset* UPixelComponentFactory::CreateAssetFromPNG(
 			static_cast<int32>(Texture->GetSurfaceWidth()),
 			static_cast<int32>(Texture->GetSurfaceHeight()));
 
-		// Configure texture for pixel art (point filtering)
 		Texture->Filter = TF_Nearest;
 		Texture->UpdateResource();
 
-		// Create default "FullTexture" slice for PNG-only imports
 		FSliceData FullTextureSlice;
 		FullTextureSlice.Name = TEXT("FullTexture");
 		FullTextureSlice.PixelRect = FPixelRect(0, 0, Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight());
 		FullTextureSlice.bIsNineSlice = false;
-		
-		// Compute normalized UVs (will be 0,0,1,1 for full texture)
+
 		FullTextureSlice.ComputeNormalizedUVs(Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight());
-		
-		// Add the default slice
+
 		TArray<FSliceData>& Slices = const_cast<TArray<FSliceData>&>(Asset->GetSlices());
 		Slices.Add(FullTextureSlice);
 
@@ -208,7 +189,6 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 	FName InName,
 	FFeedbackContext* Warn)
 {
-	// Parse JSON using TJsonReader - using efficient string handling
 	TSharedPtr<FJsonObject> JsonObject;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonContent);
 
@@ -222,7 +202,6 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 		return nullptr;
 	}
 
-	// Validate Aseprite schema
 	if (!ValidateAsepriteSchema(JsonObject))
 	{
 		UE_LOG(LogPixelComponentFactory, Error, TEXT("JSON does not match Aseprite schema for %s"), *InName.ToString());
@@ -233,11 +212,9 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 		return nullptr;
 	}
 
-	// Create the asset
 	UPixelComponentAsset* Asset = NewObject<UPixelComponentAsset>(InParent, InName, RF_Public | RF_Standalone);
 	Asset->AddToRoot();
 
-	// Parse metadata first (asset name, default pivot, etc.)
 	FAsepriteParseResult MetaResult = Asset->ParseMetadataFromJson(JsonObject);
 	if (!MetaResult.bSuccess)
 	{
@@ -245,7 +222,6 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 	}
 	MetaResult.LogResults(TEXT("Metadata"));
 
-	// Parse slices with pre-calculated UVs
 	FAsepriteParseResult SlicesResult = Asset->ParseSlicesFromJson(JsonObject);
 	if (!SlicesResult.bSuccess)
 	{
@@ -254,11 +230,9 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 		{
 			Warn->Logf(ELogVerbosity::Error, TEXT("PixelComponent: %s"), *SlicesResult.ErrorMessage);
 		}
-		// Continue anyway - slices are optional
 	}
 	SlicesResult.LogResults(TEXT("Slices"));
 
-	// Parse layers
 	FAsepriteParseResult LayersResult = Asset->ParseLayersFromJson(JsonObject);
 	if (!LayersResult.bSuccess)
 	{
@@ -266,7 +240,6 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 	}
 	LayersResult.LogResults(TEXT("Layers"));
 
-	// Parse animation data (including frame tags)
 	FAsepriteParseResult AnimResult = Asset->ParseAnimationFromJson(JsonObject);
 	if (!AnimResult.bSuccess)
 	{
@@ -274,17 +247,14 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 	}
 	AnimResult.LogResults(TEXT("Animation"));
 
-	// Extract texture dimensions from JSON metadata for pre-calculated UVs
 	int32 TexWidth = 0, TexHeight = 0;
 	if (ExtractTextureDimensions(JsonObject, TexWidth, TexHeight))
 	{
 		UE_LOG(LogPixelComponentFactory, Verbose,
 			TEXT("Extracted texture dimensions from JSON: %dx%d"), TexWidth, TexHeight);
 
-		// Set texture dimensions from import (handles scaling internally)
 		Asset->SetTextureDimensionsFromImport(TexWidth, TexHeight, true);
 
-		// Validate texture dimensions match slice data
 		ValidateTextureDimensions(JsonObject, TexWidth, TexHeight, Asset, Warn);
 	}
 	else
@@ -292,10 +262,10 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 		UE_LOG(LogPixelComponentFactory, Warning, TEXT("Could not extract texture dimensions from JSON"));
 	}
 
-	UE_LOG(LogPixelComponentFactory, Log, 
+	UE_LOG(LogPixelComponentFactory, Log,
 		TEXT("Successfully parsed Aseprite JSON: %s (Slices: %d, Layers: %d, Frames: %d, Animations: %d)"),
-		*InName.ToString(), 
-		Asset->GetSlices().Num(), 
+		*InName.ToString(),
+		Asset->GetSlices().Num(),
 		Asset->GetLayers().Num(),
 		Asset->GetFrameCount(),
 		Asset->GetAnimationSequences().Num());
@@ -313,27 +283,23 @@ bool UPixelComponentFactory::FindAndLinkSourceTexture(
 		return false;
 	}
 
-	// Get the directory and base name
 	const FString Directory = FPaths::GetPath(JsonFilePath);
 	const FString BaseName = FPaths::GetBaseFilename(JsonFilePath);
 
 	UE_LOG(LogPixelComponentFactory, Log,
 		TEXT("Looking for source texture for JSON: %s"), *JsonFilePath);
 
-	// Supported image extensions for texture lookup
 	TArray<FString> PossibleExtensions = { TEXT("png"), TEXT("PNG"), TEXT("jpg"), TEXT("jpeg"), TEXT("bmp"), TEXT("tga") };
 
 	FString FoundTexturePath;
 	FString FoundExtension;
 
-	// Use IFileManager for robust file detection
 	IFileManager& FileManager = IFileManager::Get();
 
 	for (const FString& Ext : PossibleExtensions)
 	{
 		const FString TestPath = FPaths::Combine(Directory, BaseName + TEXT(".") + Ext);
-		
-		// Check if file exists using FileManager
+
 		if (FileManager.FileExists(*TestPath))
 		{
 			FoundTexturePath = TestPath;
@@ -358,7 +324,6 @@ bool UPixelComponentFactory::FindAndLinkSourceTexture(
 		return false;
 	}
 
-	// Convert to Unreal package path
 	FString FullPath = FPaths::ConvertRelativePathToFull(FoundTexturePath);
 	FString RelativePath = FullPath;
 	FPaths::MakePathRelativeTo(RelativePath, *FPaths::ProjectContentDir());
@@ -367,17 +332,14 @@ bool UPixelComponentFactory::FindAndLinkSourceTexture(
 	UE_LOG(LogPixelComponentFactory, Log,
 		TEXT("Attempting to load texture from package path: %s"), *AssetPath);
 
-	// Try to find existing loaded object first
 	UObject* ExistingObject = FindObject<UObject>(nullptr, *AssetPath);
-	
+
 	if (!ExistingObject)
 	{
-		// Try to load from disk using StaticLoadObject
 		ExistingObject = StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AssetPath);
-		
+
 		if (!ExistingObject)
 		{
-			// Try alternative path format
 			const FString AlternativePath = FoundTexturePath;
 			ExistingObject = StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AlternativePath);
 		}
@@ -387,12 +349,11 @@ bool UPixelComponentFactory::FindAndLinkSourceTexture(
 	{
 		UTexture2D* Texture = Cast<UTexture2D>(ExistingObject);
 		Asset->SetSourceTexture(Texture);
-		
+
 		UE_LOG(LogPixelComponentFactory, Log,
 			TEXT("Successfully linked source texture: %s (loaded from %s)"),
 			*Texture->GetName(), *FoundExtension);
-		
-		// Log texture dimensions for verification
+
 		if (Texture)
 		{
 			UE_LOG(LogPixelComponentFactory, Verbose,
@@ -400,7 +361,7 @@ bool UPixelComponentFactory::FindAndLinkSourceTexture(
 				static_cast<int32>(Texture->GetSurfaceWidth()),
 				static_cast<int32>(Texture->GetSurfaceHeight()));
 		}
-		
+
 		return true;
 	}
 	else
@@ -424,22 +385,19 @@ bool UPixelComponentFactory::ValidateAsepriteSchema(const TSharedPtr<FJsonObject
 		return false;
 	}
 
-	// Aseprite JSON must have "frames" or "meta" field at minimum
 	const bool bHasFrames = JsonObject->HasField(TEXT("frames"));
 	const bool bHasMeta = JsonObject->HasField(TEXT("meta"));
-	const bool bHasSprite = JsonObject->HasField(TEXT("meta")) && 
+	const bool bHasSprite = JsonObject->HasField(TEXT("meta")) &&
 		JsonObject->GetObjectField(TEXT("meta"))->HasField(TEXT("image"));
 
-	// Check for "meta" object with required fields
 	if (bHasMeta)
 	{
 		const TSharedPtr<FJsonObject> MetaObject = JsonObject->GetObjectField(TEXT("meta"));
 		if (MetaObject)
 		{
-			// Aseprite meta should have "app" or "version" field
 			const bool bHasApp = MetaObject->HasField(TEXT("app"));
 			const bool bHasVersion = MetaObject->HasField(TEXT("version"));
-			
+
 			if (bHasApp || bHasVersion)
 			{
 				return true;
@@ -447,7 +405,6 @@ bool UPixelComponentFactory::ValidateAsepriteSchema(const TSharedPtr<FJsonObject
 		}
 	}
 
-	// Alternative: check for sprite sheet format
 	if (bHasFrames)
 	{
 		return true;
@@ -466,7 +423,6 @@ bool UPixelComponentFactory::ExtractTextureDimensions(
 		return false;
 	}
 
-	// Try to get dimensions from "meta" -> "size"
 	const TSharedPtr<FJsonObject>* MetaObject;
 	if (JsonObject->TryGetObjectField(TEXT("meta"), MetaObject) && MetaObject->IsValid())
 	{
@@ -484,7 +440,6 @@ bool UPixelComponentFactory::ExtractTextureDimensions(
 		}
 	}
 
-	// Alternative: get from first frame's dimensions
 	const TArray<TSharedPtr<FJsonValue>>* FramesArray;
 	if (JsonObject->TryGetArrayField(TEXT("frames"), FramesArray) && FramesArray->Num() > 0)
 	{
@@ -521,7 +476,6 @@ void UPixelComponentFactory::ValidateTextureDimensions(
 		return;
 	}
 
-	// Validate slice bounds are within texture dimensions
 	for (const FSliceData& Slice : Asset->GetSlices())
 	{
 		const int32 SliceRight = Slice.PixelRect.X + Slice.PixelRect.Width;
@@ -542,7 +496,6 @@ void UPixelComponentFactory::ValidateTextureDimensions(
 			}
 		}
 
-		// Validate UV coordinates are in [0, 1] range
 		if (Slice.NormalizedUVRect.IsValid())
 		{
 			if (Slice.NormalizedUVRect.MinX < 0.0f || Slice.NormalizedUVRect.MinX > 1.0f ||

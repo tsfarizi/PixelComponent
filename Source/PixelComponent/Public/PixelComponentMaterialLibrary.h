@@ -10,43 +10,39 @@ class UMaterialInstanceDynamic;
 
 /**
  * FPixelComponentMaterialLibrary
- * 
- * Static helper library for integrating PixelComponent assets with materials.
- * Provides functions to send 9-slice margins, UV coordinates, and texture
- * dimensions to material parameters for shader-based tiling logic.
- * 
- * Expected Material Parameters:
- * - Scalar: "PixelTextureWidth" - Texture width in pixels
- * - Scalar: "PixelTextureHeight" - Texture height in pixels
- * - Scalar: "NineSliceLeft" - Left margin in pixels (or normalized UV)
- * - Scalar: "NineSliceTop" - Top margin in pixels (or normalized UV)
- * - Scalar: "NineSliceRight" - Right margin in pixels (or normalized UV)
- * - Scalar: "NineSliceBottom" - Bottom margin in pixels (or normalized UV)
- * - Vector4: "NineSliceMarginsUV" - Normalized UV margins (Left, Top, Right, Bottom)
- * - Vector4: "SliceUVRect" - UV rectangle for a slice (MinX, MinY, MaxX, MaxY)
- * - Vector2: "PixelTextureSize" - Texture dimensions as vector
- * - Vector4 Array: "SliceUVArray" - Array of slice UVs for batch updates
- * 
- * HD Pixel Art Features:
- * - Automatic injection of GlobalPixelScale from UPixelComponentSettings
- * - Batch parameter updates for multiple slices
- * - Virtual resolution support for pixel-perfect rendering
- * 
- * Usage:
- *   UMaterialInstanceDynamic* MID = ...;
+ *
+ * Static utility library for integrating PixelComponent assets with material instances.
+ * Provides functions for transmitting 9-slice margins, UV coordinates, texture dimensions,
+ * pivot points, and palette profiles to material parameters for shader-based rendering.
+ *
+ * Required Material Parameters:
+ * - Scalar: PixelTextureWidth, PixelTextureHeight - Texture dimensions in pixels
+ * - Scalar: NineSliceLeft, NineSliceTop, NineSliceRight, NineSliceBottom - 9-slice margins
+ * - Vector4: NineSliceMarginsUV - Normalized UV margins (Left, Top, Right, Bottom)
+ * - Vector4: SliceUVRect - UV rectangle for slice (MinX, MinY, MaxX, MaxY)
+ * - Vector4: PixelTextureSize - Texture dimensions as vector (Width, Height, 0, 0)
+ * - Vector4: NineSliceCenterUV - Center UV region for 9-slice tiling
+ * - Vector4: Pivot - Normalized pivot point (X, Y, 0, 0)
+ * - Vector4 Array: SliceUVArray - Batch UV coordinates for multiple slices
+ * - Vector4: PixelComponent_Color_{LayerName} - Palette profile color overrides
+ * - Vector4: PixelComponent_Grayscale_{Index} - Grayscale mapping samples
+ *
+ * Usage Pattern:
+ *   UMaterialInstanceDynamic* MID = CreateDynamicMaterialInstance();
  *   FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(Asset, MID);
+ *   FPixelComponentMaterialLibrary::ApplyPaletteProfile(Asset, ProfileName, MID);
  */
 class PIXELCOMPONENT_API FPixelComponentMaterialLibrary
 {
 public:
 	/**
-	 * Send all 9-slice and texture data to a material instance.
+	 * Transmits 9-slice margin data and texture parameters to a material instance.
 	 * Automatically injects GlobalPixelScale and VirtualResolution from settings.
-	 * 
-	 * @param Asset The PixelComponent asset containing slice data
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @param bUseNormalizedUVs If true, send normalized UV values; if false, send pixel values
-	 * @return true if parameters were successfully set
+	 *
+	 * @param Asset Source PixelComponent asset containing slice and margin data
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @param bUseNormalizedUVs If true, sends UV-space margins; if false, sends pixel-space margins
+	 * @return true if all parameters were successfully transmitted
 	 */
 	static bool SendNineSliceDataToMaterial(
 		const UPixelComponentAsset* Asset,
@@ -55,13 +51,13 @@ public:
 	);
 
 	/**
-	 * Send 9-slice margins for a specific slice to a material.
-	 * 
-	 * @param Asset The PixelComponent asset
-	 * @param SliceName Name of the slice to get margins from
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @param bUseNormalizedUVs If true, convert margins to normalized UV space
-	 * @return true if parameters were successfully set
+	 * Transmits 9-slice margins for a specific slice to a material instance.
+	 *
+	 * @param Asset Source PixelComponent asset
+	 * @param SliceName Name identifier of the slice to retrieve margins from
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @param bUseNormalizedUVs If true, converts margins to normalized UV space
+	 * @return true if parameters were successfully transmitted
 	 */
 	static bool SendSliceNineSliceToMaterial(
 		const UPixelComponentAsset* Asset,
@@ -71,13 +67,12 @@ public:
 	);
 
 	/**
-	 * Send texture dimensions to material parameters.
-	 * Automatically retrieves texture dimensions from Asset->GetSourceTexture().
-	 * Also sends GlobalPixelScale from UPixelComponentSettings.
+	 * Transmits texture dimensions to material parameters.
+	 * Retrieves dimensions from Asset->GetSourceTexture() if available, otherwise uses cached values.
 	 *
-	 * @param Asset The PixelComponent asset (texture dimensions retrieved from SourceTexture)
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @return true if parameters were successfully set
+	 * @param Asset Source PixelComponent asset
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @return true if parameters were successfully transmitted
 	 */
 	static bool SendTextureDimensionsToMaterial(
 		const UPixelComponentAsset* Asset,
@@ -85,12 +80,13 @@ public:
 	);
 
 	/**
-	 * Send UV rectangle for a slice to material.
-	 * 
-	 * @param Asset The PixelComponent asset
-	 * @param SliceName Name of the slice
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @return true if parameters were successfully set
+	 * Transmits UV rectangle for a specified slice to a material instance.
+	 * Falls back to full texture UVs (0,0,1,1) if slice is not found or empty.
+	 *
+	 * @param Asset Source PixelComponent asset
+	 * @param SliceName Name identifier of the slice
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @return true if parameters were successfully transmitted
 	 */
 	static bool SendSliceUVToMaterial(
 		const UPixelComponentAsset* Asset,
@@ -99,13 +95,13 @@ public:
 	);
 
 	/**
-	 * Send the center UV region for a 9-slice to material.
-	 * This is the tileable region that should be stretched.
-	 * 
-	 * @param Asset The PixelComponent asset
-	 * @param SliceName Name of the 9-slice
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @return true if parameters were successfully set
+	 * Transmits the center UV region for a 9-slice to a material instance.
+	 * The center region defines the tileable area that should be stretched during rendering.
+	 *
+	 * @param Asset Source PixelComponent asset
+	 * @param SliceName Name identifier of the 9-slice
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @return true if parameters were successfully transmitted
 	 */
 	static bool SendNineSliceCenterUVToMaterial(
 		const UPixelComponentAsset* Asset,
@@ -114,13 +110,13 @@ public:
 	);
 
 	/**
-	 * Send ALL slice UVs as a Vector4 array for batch material updates.
-	 * More efficient than setting individual parameters for multiple slices.
-	 * 
-	 * @param Asset The PixelComponent asset
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @param ParameterName Name of the array parameter in the material
-	 * @return Number of UVs sent, or 0 on failure
+	 * Transmits all slice UV coordinates as a batch for efficient material updates.
+	 * Creates indexed parameters (SliceUVArray_0, SliceUVArray_1, etc.) for each slice.
+	 *
+	 * @param Asset Source PixelComponent asset
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @param ParameterName Base name for the array parameter (default: "SliceUVArray")
+	 * @return Number of UV coordinates transmitted, or 0 on failure
 	 */
 	static int32 SendAllSliceUVsAsBatch(
 		const UPixelComponentAsset* Asset,
@@ -129,12 +125,11 @@ public:
 	);
 
 	/**
-	 * Send layer color data to material parameters.
-	 * Uses LayerToMaterialParamMap from the asset.
-	 * 
-	 * @param Asset The PixelComponent asset
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @return Number of layer parameters set
+	 * Transmits layer color data to material parameters using layer-to-parameter mappings.
+	 *
+	 * @param Asset Source PixelComponent asset
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @return Number of layer color parameters transmitted
 	 */
 	static int32 SendLayerColorsToMaterial(
 		const UPixelComponentAsset* Asset,
@@ -142,12 +137,13 @@ public:
 	);
 
 	/**
-	 * Send pivot point data to material parameters.
+	 * Transmits pivot point data to material parameters.
+	 * Uses slice-specific pivot if SliceName is provided, otherwise uses default pivot.
 	 *
-	 * @param Asset The PixelComponent asset
-	 * @param SliceName Name of the slice (or empty for default pivot)
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @return true if parameters were successfully set
+	 * @param Asset Source PixelComponent asset
+	 * @param SliceName Name identifier of the slice (empty for default pivot)
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @return true if parameters were successfully transmitted
 	 */
 	static bool SendPivotToMaterial(
 		const UPixelComponentAsset* Asset,
@@ -156,13 +152,13 @@ public:
 	);
 
 	/**
-	 * Apply a palette profile to a material instance.
-	 * Injects all color overrides from the specified profile into the shader.
+	 * Applies a palette profile to a material instance by injecting color override parameters.
+	 * Creates parameters with prefix "PixelComponent_Color_{LayerName}" for each override.
 	 *
-	 * @param Asset The PixelComponent asset containing palette profiles
-	 * @param ProfileName Name of the palette profile to apply
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @return Number of color parameters set, or 0 if profile not found
+	 * @param Asset Source PixelComponent asset containing palette profiles
+	 * @param ProfileName Name identifier of the palette profile to apply
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @return Number of color parameters applied, or 0 if profile not found
 	 */
 	static int32 ApplyPaletteProfile(
 		const UPixelComponentAsset* Asset,
@@ -171,23 +167,23 @@ public:
 	);
 
 	/**
-	 * Global State Injection: Send settings-based parameters.
-	 * Automatically retrieves GlobalPixelScale and VirtualResolution from UPixelComponentSettings.
+	 * Injects global configuration parameters from UPixelComponentSettings.
+	 * Transmits GlobalPixelScale and VirtualResolution to the material instance.
 	 *
-	 * @param MaterialInstance The dynamic material instance to update
-	 * @return true if parameters were successfully set
+	 * @param MaterialInstance Target dynamic material instance for parameter injection
+	 * @return true if parameters were successfully transmitted
 	 */
 	static bool InjectGlobalSettings(
 		UMaterialInstanceDynamic* MaterialInstance
 	);
 
 	/**
-	 * Convert pixel margins to normalized UV margins.
-	 * 
-	 * @param Margins Pixel-space margins
-	 * @param TextureWidth Texture width in pixels
-	 * @param TextureHeight Texture height in pixels
-	 * @return Normalized UV margins
+	 * Converts pixel-space margins to normalized UV-space margins.
+	 *
+	 * @param Margins Pixel-space margin values
+	 * @param TextureWidth Source texture width in pixels
+	 * @param TextureHeight Source texture height in pixels
+	 * @return Normalized UV-space margins (0-1 range)
 	 */
 	static FMargin ConvertMarginsToNormalizedUV(
 		const FMargin& Margins,
@@ -196,12 +192,12 @@ public:
 	);
 
 	/**
-	 * Convert normalized UV margins to pixel margins.
-	 * 
-	 * @param UVMargins Normalized UV margins (0-1)
-	 * @param TextureWidth Texture width in pixels
-	 * @param TextureHeight Texture height in pixels
-	 * @return Pixel-space margins
+	 * Converts normalized UV-space margins to pixel-space margins.
+	 *
+	 * @param UVMargins Normalized UV-space margins (0-1 range)
+	 * @param TextureWidth Source texture width in pixels
+	 * @param TextureHeight Source texture height in pixels
+	 * @return Pixel-space margin values
 	 */
 	static FMargin ConvertUVMarginsToPixels(
 		const FMargin& UVMargins,
@@ -210,10 +206,10 @@ public:
 	);
 
 	/**
-	 * Parameter names used by the material library.
-	 * Override these if your material uses different parameter names.
+	 * Parameter name constants used by the material library.
+	 * These constants define the standard parameter naming convention.
 	 */
-	static const FName Param_Prefix;  // Common prefix for all parameters ("PixelComponent_")
+	static const FName Param_Prefix;
 	static const FName Param_PixelTextureWidth;
 	static const FName Param_PixelTextureHeight;
 	static const FName Param_PixelTextureSize;

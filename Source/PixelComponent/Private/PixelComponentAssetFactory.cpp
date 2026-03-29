@@ -17,8 +17,6 @@ UPixelComponentAssetFactory::UPixelComponentAssetFactory()
 
 bool UPixelComponentAssetFactory::ConfigureProperties()
 {
-	// Optional: Could show a dialog to select initial texture
-	// For now, we'll let users assign texture in the asset editor
 	return true;
 }
 
@@ -30,15 +28,12 @@ UObject* UPixelComponentAssetFactory::FactoryCreateNew(
 	UObject* Context,
 	FFeedbackContext* Warn)
 {
-	// Create the new PixelComponentAsset
 	UPixelComponentAsset* NewAsset = NewObject<UPixelComponentAsset>(InParent, InName, Flags | RF_Transactional);
 
 	if (NewAsset)
 	{
-		// Set default asset name
 		NewAsset->SetAssetName(InName.ToString());
 
-		// If a texture was selected, assign it
 		if (SourceTexture)
 		{
 			NewAsset->SetSourceTexture(SourceTexture);
@@ -49,7 +44,6 @@ UObject* UPixelComponentAssetFactory::FactoryCreateNew(
 			UE_LOG(LogPixelComponentAssetFactory, Log, TEXT("Created new empty PixelComponentAsset"));
 		}
 
-		// Mark package dirty for saving
 		InParent->MarkPackageDirty();
 
 		return NewAsset;

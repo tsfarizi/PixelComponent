@@ -6,7 +6,6 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/Texture2D.h"
-#include "Types/SlateEnums.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPixelImage, Log, All);
 
@@ -21,7 +20,6 @@ void UPixelImage::SynchronizeProperties()
 {
 	Super::SynchronizeProperties();
 
-	// Synchronize properties from widget to Slate
 	if (bAutoInitializeMaterial && PixelAsset)
 	{
 		RefreshMaterialParameters();
@@ -39,7 +37,6 @@ void UPixelImage::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedE
 
 	const FName PropertyName = PropertyChangedEvent.Property->GetFName();
 
-	// Handle property changes for real-time preview in UMG Designer
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, PixelAsset) ||
 		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, TargetSlice) ||
 		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, ActivePaletteProfile) ||
@@ -47,7 +44,6 @@ void UPixelImage::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedE
 	{
 		if (bAutoInitializeMaterial && PixelAsset)
 		{
-			// Refresh material parameters immediately for Designer preview
 			RefreshMaterialParameters();
 		}
 	}
@@ -74,7 +70,6 @@ void UPixelImage::SetTargetSlice(const FString& NewSlice)
 
 		if (bAutoInitializeMaterial && PixelAsset)
 		{
-			// Only need to refresh material parameters, not reinitialize
 			SendMaterialParameters();
 		}
 	}
@@ -88,7 +83,6 @@ void UPixelImage::SetActivePaletteProfile(const FName& NewProfile)
 
 		if (bAutoInitializeMaterial && PixelAsset && DynamicMaterialInstance)
 		{
-			// Apply the new palette profile
 			FPixelComponentMaterialLibrary::ApplyPaletteProfile(PixelAsset, ActivePaletteProfile, DynamicMaterialInstance);
 		}
 	}
@@ -106,7 +100,6 @@ void UPixelImage::SetAutoInitializeMaterialEnabled(bool bEnabled)
 		}
 		else if (!bEnabled)
 		{
-			// Clear the dynamic material if disabling auto-init
 			ClearMaterial();
 		}
 	}
@@ -120,13 +113,11 @@ void UPixelImage::RefreshMaterialParameters()
 		return;
 	}
 
-	// Initialize material instance if needed
 	if (!DynamicMaterialInstance && bAutoInitializeMaterial)
 	{
 		InitializeMaterialInstance();
 	}
 
-	// Send all material parameters
 	if (DynamicMaterialInstance)
 	{
 		SendMaterialParameters();
@@ -141,7 +132,6 @@ void UPixelImage::ClearMaterial()
 		DynamicMaterialInstance = nullptr;
 	}
 
-	// Reset brush to default
 	SetBrush(FSlateBrush());
 }
 
@@ -153,7 +143,6 @@ void UPixelImage::InitializeMaterialInstance()
 		return;
 	}
 
-	// Get the source texture from the asset
 	UTexture2D* SourceTexture = PixelAsset->GetSourceTexture();
 	if (!SourceTexture)
 	{
@@ -161,14 +150,12 @@ void UPixelImage::InitializeMaterialInstance()
 		return;
 	}
 
-	// Try to get base material from current brush
 	UMaterialInterface* BaseMaterial = GetBaseMaterial();
 
 	if (!BaseMaterial)
 	{
 		UE_LOG(LogPixelImage, Log, TEXT("No base material in brush, using default material"));
 
-		// Use a default material if no brush material exists
 		BaseMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/WorldGridMaterial.WorldGridMaterial"));
 
 		if (!BaseMaterial)
@@ -178,7 +165,6 @@ void UPixelImage::InitializeMaterialInstance()
 		}
 	}
 
-	// Create dynamic material instance
 	DynamicMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 
 	if (!DynamicMaterialInstance)
@@ -187,10 +173,8 @@ void UPixelImage::InitializeMaterialInstance()
 		return;
 	}
 
-	// Set the texture parameter
 	DynamicMaterialInstance->SetTextureParameterValue(FName(TEXT("PixelTexture")), SourceTexture);
 
-	// Apply the material to the brush
 	SetBrushFromMaterial(DynamicMaterialInstance);
 
 	UE_LOG(LogPixelImage, Log, TEXT("Initialized material instance for PixelImage"));
@@ -203,15 +187,10 @@ void UPixelImage::SendMaterialParameters()
 		return;
 	}
 
-	// Send texture dimensions (automatically retrieves from SourceTexture)
 	FPixelComponentMaterialLibrary::SendTextureDimensionsToMaterial(PixelAsset, DynamicMaterialInstance);
 
-	// Send slice UV coordinates
-	// If TargetSlice is empty, the library will send full UVs (0,0,1,1) automatically
-	// This ensures the entire texture is rendered for assets without slices
 	FPixelComponentMaterialLibrary::SendSliceUVToMaterial(PixelAsset, TargetSlice, DynamicMaterialInstance);
 
-	// Send 9-slice data if a target slice is specified and has 9-slice margins
 	if (!TargetSlice.IsEmpty())
 	{
 		const FSliceData* Slice = PixelAsset->FindSliceByName(TargetSlice);
@@ -223,14 +202,11 @@ void UPixelImage::SendMaterialParameters()
 	}
 	else
 	{
-		// Send default 9-slice data if available (for assets with default margins)
 		FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(PixelAsset, DynamicMaterialInstance, true);
 	}
 
-	// Send pivot point if needed
 	FPixelComponentMaterialLibrary::SendPivotToMaterial(PixelAsset, TargetSlice, DynamicMaterialInstance);
 
-	// Apply palette profile if specified
 	if (ActivePaletteProfile != NAME_None)
 	{
 		FPixelComponentMaterialLibrary::ApplyPaletteProfile(PixelAsset, ActivePaletteProfile, DynamicMaterialInstance);
@@ -254,12 +230,11 @@ bool UPixelImage::ValidateConfiguration() const
 		return false;
 	}
 
-	// Validate target slice if specified
 	if (!TargetSlice.IsEmpty())
 	{
 		bool bFound = false;
 		PixelAsset->GetSliceByName(TargetSlice, bFound);
-		
+
 		if (!bFound)
 		{
 			UE_LOG(LogPixelImage, Warning, TEXT("Target slice '%s' not found in PixelAsset"), *TargetSlice);
@@ -272,7 +247,6 @@ bool UPixelImage::ValidateConfiguration() const
 
 UMaterialInterface* UPixelImage::GetBaseMaterial() const
 {
-	// Get the material from the current brush
 	const FSlateBrush CurrentBrush = GetBrush();
 	if (CurrentBrush.GetResourceObject())
 	{
