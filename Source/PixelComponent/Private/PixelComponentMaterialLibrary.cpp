@@ -8,6 +8,7 @@
 DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentMaterial, Log, All);
 
 // Parameter name definitions
+const FName FPixelComponentMaterialLibrary::Param_Prefix(TEXT("PixelComponent_"));
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureWidth(TEXT("PixelTextureWidth"));
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureHeight(TEXT("PixelTextureHeight"));
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureSize(TEXT("PixelTextureSize"));
@@ -332,6 +333,64 @@ bool FPixelComponentMaterialLibrary::SendPivotToMaterial(
 		TEXT("Sent pivot: (%.4f, %.4f)"), NormalizedPivot.X, NormalizedPivot.Y);
 
 	return true;
+}
+
+int32 FPixelComponentMaterialLibrary::ApplyPaletteProfile(
+	const UPixelComponentAsset* Asset,
+	const FName& ProfileName,
+	UMaterialInstanceDynamic* MaterialInstance)
+{
+	if (!Asset || !MaterialInstance || ProfileName == NAME_None)
+	{
+		return 0;
+	}
+
+	// Get the palette profile from the asset
+	bool bFound = false;
+	FPixelPaletteProfile Profile = Asset->GetPaletteProfile(ProfileName.ToString(), bFound);
+
+	if (!bFound)
+	{
+		UE_LOG(LogPixelComponentMaterial, Warning, TEXT("Palette profile '%s' not found in asset"), *ProfileName.ToString());
+		return 0;
+	}
+
+	int32 ColorsSet = 0;
+
+	// Apply all color overrides from the profile
+	for (const auto& OverridePair : Profile.ColorOverrides)
+	{
+		const FName& LayerName = OverridePair.Key;
+		const FLinearColor& Color = OverridePair.Value;
+
+		// Set color parameter with prefixed name
+		const FName ParamName = *FString::Printf(TEXT("%sColor_%s"), *Param_Prefix.ToString(), *LayerName.ToString());
+		MaterialInstance->SetVectorParameterValue(ParamName, Color);
+		ColorsSet++;
+
+		UE_LOG(LogPixelComponentMaterial, Verbose,
+			TEXT("Applied palette override: %s -> (%.3f, %.3f, %.3f, %.3f)"),
+			*LayerName.ToString(), Color.R, Color.G, Color.B, Color.A);
+	}
+
+	// Apply grayscale mapping (send as texture or array if needed)
+	// For efficiency, only send if grayscale map has been customized
+	if (Profile.GrayscaleMap.Num() > 0)
+	{
+		// Send first few grayscale values as sample parameters
+		// For full grayscale support, use a texture parameter
+		const int32 SampleCount = FMath::Min(8, Profile.GrayscaleMap.Num());
+		for (int32 i = 0; i < SampleCount; i++)
+		{
+			const FName ParamName = *FString::Printf(TEXT("%sGrayscale_%d"), *Param_Prefix.ToString(), i);
+			MaterialInstance->SetVectorParameterValue(ParamName, Profile.GrayscaleMap[i]);
+		}
+	}
+
+	UE_LOG(LogPixelComponentMaterial, Log,
+		TEXT("Applied palette profile '%s': %d color overrides"), *ProfileName.ToString(), ColorsSet);
+
+	return ColorsSet;
 }
 
 bool FPixelComponentMaterialLibrary::InjectGlobalSettings(

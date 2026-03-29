@@ -769,3 +769,105 @@ struct PIXELCOMPONENT_API FAsepriteParseResult
 		}
 	}
 };
+
+/**
+ * Palette Profile for dynamic color overrides.
+ * Maps layer names or color indices to new colors.
+ * 
+ * Technical Notes:
+ * - Used for material instancing and dynamic recoloring
+ * - Supports grayscale index mapping (0-255) to FLinearColor
+ * - Layer-based overrides use FName keys (e.g., "Body", "Eyes")
+ */
+USTRUCT(BlueprintType)
+struct PIXELCOMPONENT_API FPixelPaletteProfile
+{
+	GENERATED_BODY()
+
+	/** Profile display name */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
+	FString ProfileName;
+
+	/** Color overrides: maps layer name or index to new color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (TitleProperty = "Key"))
+	TMap<FName, FLinearColor> ColorOverrides;
+
+	/** Grayscale index mapping (0-255) to color */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
+	TArray<FLinearColor> GrayscaleMap;
+
+	FPixelPaletteProfile()
+	{
+		// Pre-allocate grayscale map with 256 entries
+		GrayscaleMap.SetNum(256);
+		for (int32 i = 0; i < 256; i++)
+		{
+			const float Gray = static_cast<float>(i) / 255.0f;
+			GrayscaleMap[i] = FLinearColor(Gray, Gray, Gray, 1.0f);
+		}
+	}
+
+	/**
+	 * Add a color override for a layer.
+	 * @param LayerName Name of the layer to override
+	 * @param Color New color to apply
+	 */
+	void AddColorOverride(const FName& LayerName, const FLinearColor& Color)
+	{
+		ColorOverrides.Add(LayerName, Color);
+	}
+
+	/**
+	 * Get color override for a layer.
+	 * @param LayerName Name of the layer
+	 * @param bFound Output: true if override exists
+	 * @return Override color or FLinearColor::White if not found
+	 */
+	FLinearColor GetColorOverride(const FName& LayerName, bool& bFound) const
+	{
+		const FLinearColor* FoundColor = ColorOverrides.Find(LayerName);
+		if (FoundColor)
+		{
+			bFound = true;
+			return *FoundColor;
+		}
+		bFound = false;
+		return FLinearColor::White;
+	}
+
+	/**
+	 * Set grayscale index to color mapping.
+	 * @param Index Grayscale index (0-255)
+	 * @param Color Color to map to
+	 */
+	void SetGrayscaleColor(int32 Index, const FLinearColor& Color)
+	{
+		if (Index >= 0 && Index < 256)
+		{
+			GrayscaleMap[Index] = Color;
+		}
+	}
+
+	/**
+	 * Get color from grayscale mapping.
+	 * @param Index Grayscale index (0-255)
+	 * @return Mapped color
+	 */
+	FLinearColor GetGrayscaleColor(int32 Index) const
+	{
+		if (Index >= 0 && Index < 256)
+		{
+			return GrayscaleMap[Index];
+		}
+		return FLinearColor::White;
+	}
+
+	/**
+	 * Validate the profile.
+	 * @return true if profile has valid data
+	 */
+	bool IsValid() const
+	{
+		return ColorOverrides.Num() > 0 || GrayscaleMap.Num() > 0;
+	}
+};

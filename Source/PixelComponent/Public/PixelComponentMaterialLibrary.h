@@ -143,7 +143,7 @@ public:
 
 	/**
 	 * Send pivot point data to material parameters.
-	 * 
+	 *
 	 * @param Asset The PixelComponent asset
 	 * @param SliceName Name of the slice (or empty for default pivot)
 	 * @param MaterialInstance The dynamic material instance to update
@@ -156,9 +156,24 @@ public:
 	);
 
 	/**
+	 * Apply a palette profile to a material instance.
+	 * Injects all color overrides from the specified profile into the shader.
+	 *
+	 * @param Asset The PixelComponent asset containing palette profiles
+	 * @param ProfileName Name of the palette profile to apply
+	 * @param MaterialInstance The dynamic material instance to update
+	 * @return Number of color parameters set, or 0 if profile not found
+	 */
+	static int32 ApplyPaletteProfile(
+		const UPixelComponentAsset* Asset,
+		const FName& ProfileName,
+		UMaterialInstanceDynamic* MaterialInstance
+	);
+
+	/**
 	 * Global State Injection: Send settings-based parameters.
 	 * Automatically retrieves GlobalPixelScale and VirtualResolution from UPixelComponentSettings.
-	 * 
+	 *
 	 * @param MaterialInstance The dynamic material instance to update
 	 * @return true if parameters were successfully set
 	 */
@@ -198,6 +213,7 @@ public:
 	 * Parameter names used by the material library.
 	 * Override these if your material uses different parameter names.
 	 */
+	static const FName Param_Prefix;  // Common prefix for all parameters ("PixelComponent_")
 	static const FName Param_PixelTextureWidth;
 	static const FName Param_PixelTextureHeight;
 	static const FName Param_PixelTextureSize;

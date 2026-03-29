@@ -88,6 +88,64 @@ void UPixelComponentAsset::SetLayerMaterialMapping(const FString& LayerName, con
 	}
 }
 
+// ========================================================================
+// Palette Profile Access
+// ========================================================================
+
+TArray<FString> UPixelComponentAsset::GetAllPaletteProfileNames() const
+{
+	TArray<FString> Names;
+	PaletteProfiles.GetKeys(Names);
+	return Names;
+}
+
+FPixelPaletteProfile UPixelComponentAsset::GetPaletteProfile(const FString& ProfileName, bool& bFound) const
+{
+	const FPixelPaletteProfile* FoundProfile = PaletteProfiles.Find(ProfileName);
+	if (FoundProfile)
+	{
+		bFound = true;
+		return *FoundProfile;
+	}
+	bFound = false;
+	return FPixelPaletteProfile();
+}
+
+void UPixelComponentAsset::SetPaletteProfile(const FString& ProfileName, const FPixelPaletteProfile& Profile)
+{
+	if (!ProfileName.IsEmpty())
+	{
+		FPixelPaletteProfile NewProfile = Profile;
+		NewProfile.ProfileName = ProfileName;
+		PaletteProfiles.Add(ProfileName, NewProfile);
+	}
+}
+
+bool UPixelComponentAsset::RemovePaletteProfile(const FString& ProfileName)
+{
+	if (PaletteProfiles.Contains(ProfileName))
+	{
+		PaletteProfiles.Remove(ProfileName);
+		return true;
+	}
+	return false;
+}
+
+FLinearColor UPixelComponentAsset::GetColorOverrideFromProfile(const FString& ProfileName, const FName& LayerName, bool& bFound) const
+{
+	const FPixelPaletteProfile* FoundProfile = PaletteProfiles.Find(ProfileName);
+	if (FoundProfile)
+	{
+		return FoundProfile->GetColorOverride(LayerName, bFound);
+	}
+	bFound = false;
+	return FLinearColor::White;
+}
+
+// ========================================================================
+// 9-Slice Data
+// ========================================================================
+
 FPixelNineSliceMargins UPixelComponentAsset::GetSliceNineSliceMarginsUV(const FString& SliceName) const
 {
 	const FSliceData* Slice = FindSliceByName(SliceName);

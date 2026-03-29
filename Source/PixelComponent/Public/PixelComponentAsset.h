@@ -155,6 +155,52 @@ public:
 	void SetLayerMaterialMapping(const FString& LayerName, const FName& ParamName);
 
 	// ========================================================================
+	// Palette Profile Access
+	// ========================================================================
+
+	/**
+	 * Get all palette profile names.
+	 * @return Array of profile names
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
+	TArray<FString> GetAllPaletteProfileNames() const;
+
+	/**
+	 * Get a palette profile by name.
+	 * @param ProfileName Name of the palette profile
+	 * @param bFound Output: true if profile was found
+	 * @return Palette profile data (invalid struct if not found)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
+	FPixelPaletteProfile GetPaletteProfile(const FString& ProfileName, bool& bFound) const;
+
+	/**
+	 * Add or update a palette profile.
+	 * @param ProfileName Name of the palette profile
+	 * @param Profile Profile data to store
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
+	void SetPaletteProfile(const FString& ProfileName, const FPixelPaletteProfile& Profile);
+
+	/**
+	 * Remove a palette profile.
+	 * @param ProfileName Name of the profile to remove
+	 * @return true if profile was removed
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
+	bool RemovePaletteProfile(const FString& ProfileName);
+
+	/**
+	 * Get color override for a layer from a specific profile.
+	 * @param ProfileName Name of the palette profile
+	 * @param LayerName Name of the layer
+	 * @param bFound Output: true if override exists
+	 * @return Override color or White if not found
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
+	FLinearColor GetColorOverrideFromProfile(const FString& ProfileName, const FName& LayerName, bool& bFound) const;
+
+	// ========================================================================
 	// 9-Slice Data
 	// ========================================================================
 
@@ -408,6 +454,10 @@ protected:
 	/** Layer name to material parameter mapping */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Material")
 	TMap<FString, FName> LayerToMaterialParamMap;
+
+	/** Palette profiles for dynamic color overrides */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Palette")
+	TMap<FString, FPixelPaletteProfile> PaletteProfiles;
 
 	/** Default 9-slice margins (for the primary slice) in pixels */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|9-Slice")

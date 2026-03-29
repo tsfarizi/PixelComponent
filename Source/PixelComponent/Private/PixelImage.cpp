@@ -42,6 +42,7 @@ void UPixelImage::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedE
 	// Handle property changes for real-time preview in UMG Designer
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, PixelAsset) ||
 		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, TargetSlice) ||
+		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, ActivePaletteProfile) ||
 		PropertyName == GET_MEMBER_NAME_CHECKED(UPixelImage, bAutoInitializeMaterial))
 	{
 		if (bAutoInitializeMaterial && PixelAsset)
@@ -75,6 +76,20 @@ void UPixelImage::SetTargetSlice(const FString& NewSlice)
 		{
 			// Only need to refresh material parameters, not reinitialize
 			SendMaterialParameters();
+		}
+	}
+}
+
+void UPixelImage::SetActivePaletteProfile(const FName& NewProfile)
+{
+	if (ActivePaletteProfile != NewProfile)
+	{
+		ActivePaletteProfile = NewProfile;
+
+		if (bAutoInitializeMaterial && PixelAsset && DynamicMaterialInstance)
+		{
+			// Apply the new palette profile
+			FPixelComponentMaterialLibrary::ApplyPaletteProfile(PixelAsset, ActivePaletteProfile, DynamicMaterialInstance);
 		}
 	}
 }
@@ -215,8 +230,15 @@ void UPixelImage::SendMaterialParameters()
 	// Send pivot point if needed
 	FPixelComponentMaterialLibrary::SendPivotToMaterial(PixelAsset, TargetSlice, DynamicMaterialInstance);
 
-	UE_LOG(LogPixelImage, Verbose, TEXT("Sent material parameters for PixelImage (Slice: %s)"), 
-		TargetSlice.IsEmpty() ? TEXT("<full texture>") : *TargetSlice);
+	// Apply palette profile if specified
+	if (ActivePaletteProfile != NAME_None)
+	{
+		FPixelComponentMaterialLibrary::ApplyPaletteProfile(PixelAsset, ActivePaletteProfile, DynamicMaterialInstance);
+	}
+
+	UE_LOG(LogPixelImage, Verbose, TEXT("Sent material parameters for PixelImage (Slice: %s, Palette: %s)"),
+		TargetSlice.IsEmpty() ? TEXT("<full texture>") : *TargetSlice,
+		ActivePaletteProfile == NAME_None ? TEXT("<none>") : *ActivePaletteProfile.ToString());
 }
 
 bool UPixelImage::ValidateConfiguration() const

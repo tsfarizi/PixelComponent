@@ -174,6 +174,20 @@ UPixelComponentAsset* UPixelComponentFactory::CreateAssetFromPNG(
 		Texture->Filter = TF_Nearest;
 		Texture->UpdateResource();
 
+		// Create default "FullTexture" slice for PNG-only imports
+		FSliceData FullTextureSlice;
+		FullTextureSlice.Name = TEXT("FullTexture");
+		FullTextureSlice.PixelRect = FPixelRect(0, 0, Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight());
+		FullTextureSlice.bIsNineSlice = false;
+		
+		// Compute normalized UVs (will be 0,0,1,1 for full texture)
+		FullTextureSlice.ComputeNormalizedUVs(Texture->GetSurfaceWidth(), Texture->GetSurfaceHeight());
+		
+		// Add the default slice
+		TArray<FSliceData>& Slices = const_cast<TArray<FSliceData>&>(Asset->GetSlices());
+		Slices.Add(FullTextureSlice);
+
+		UE_LOG(LogPixelComponentFactory, Log, TEXT("Created default 'FullTexture' slice (UV: 0,0,1,1)"));
 		UE_LOG(LogPixelComponentFactory, Log, TEXT("Created basic PixelComponentAsset (no slices/animations)"));
 		return Asset;
 	}

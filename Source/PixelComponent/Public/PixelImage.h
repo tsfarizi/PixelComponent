@@ -90,6 +90,20 @@ public:
 	void SetTargetSlice(const FString& NewSlice);
 
 	/**
+	 * Get the active palette profile name.
+	 * @return Name of the active palette profile
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
+	FName GetActivePaletteProfile() const { return ActivePaletteProfile; }
+
+	/**
+	 * Set the active palette profile for dynamic color overrides.
+	 * @param NewProfile Name of the palette profile
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Palette")
+	void SetActivePaletteProfile(const FName& NewProfile);
+
+	/**
 	 * Check if auto-initialize material is enabled.
 	 * @return true if material is auto-initialized
 	 */
@@ -141,6 +155,13 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Image", meta = (AllowPrivateAccess = "true"))
 	FString TargetSlice;
+
+	/**
+	 * Active palette profile for dynamic color overrides.
+	 * Leave empty to use default colors.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Palette", meta = (AllowPrivateAccess = "true"))
+	FName ActivePaletteProfile;
 
 	/**
 	 * Automatically create and configure material instance.
