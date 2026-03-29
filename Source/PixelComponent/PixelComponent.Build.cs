@@ -15,8 +15,8 @@ public class PixelComponent : ModuleRules
 			"Engine",
 			"Json",
 			"JsonUtilities",
-			"DeveloperSettings",  // For UPixelComponentSettings
-			"UMG",                 // For UPixelImage widget
+			"DeveloperSettings",
+			"UMG",
 			"Slate",
 			"SlateCore"
 		});
@@ -25,14 +25,6 @@ public class PixelComponent : ModuleRules
 		{
 		});
 
-		// Enable C++17/20 features
-		if (Target.bBuildEditor)
-		{
-			PublicDependencyModuleNames.Add("UnrealEd");
-		}
-
-		// Optimize string handling
 		bLegacyPublicIncludePaths = false;
-		ShadowVariableWarningLevel = WarningLevel.Off;
 	}
 }

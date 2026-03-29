@@ -3,7 +3,8 @@
 #include "PixelComponentAssetFactory.h"
 #include "PixelComponentAsset.h"
 #include "Engine/Texture2D.h"
-#include "Misc/MessageDialog.h"
+#include "AssetToolsModule.h"
+#include "PixelComponentEditorModule.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentAssetFactory, Log, All);
 
@@ -50,4 +51,9 @@ UObject* UPixelComponentAssetFactory::FactoryCreateNew(
 	}
 
 	return nullptr;
+}
+
+uint32 UPixelComponentAssetFactory::GetMenuCategories() const
+{
+	return FPixelComponentEditorModule::GetAssetCategory();
 }

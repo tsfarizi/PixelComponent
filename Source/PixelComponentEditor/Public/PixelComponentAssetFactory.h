@@ -4,18 +4,16 @@
 
 #include "CoreMinimal.h"
 #include "Factories/Factory.h"
-#include "PixelComponentAsset.h"
 #include "PixelComponentAssetFactory.generated.h"
 
 /**
  * UPixelComponentAssetFactory
  *
  * Factory for creating PixelComponentAsset instances via the Content Browser.
- * Allows users to right-click in Content Browser and select
- * "Pixel Component > Pixel Component Asset" to create a new asset.
+ * Appears in right-click menu under "Pixel Component" category.
  */
 UCLASS(ClassGroup = (PixelComponent), meta = (DisplayName = "Pixel Component Asset", DisplayCategory = "Pixel Component"))
-class PIXELCOMPONENT_API UPixelComponentAssetFactory : public UFactory
+class PIXELCOMPONENTEDITOR_API UPixelComponentAssetFactory : public UFactory
 {
 	GENERATED_BODY()
 
@@ -25,6 +23,7 @@ public:
 	//~ Begin UFactory Interface
 	virtual bool ConfigureProperties() override;
 	virtual UObject* FactoryCreateNew(UClass* InClass, UObject* InParent, FName InName, EObjectFlags Flags, UObject* Context, FFeedbackContext* Warn) override;
+	virtual uint32 GetMenuCategories() const override;
 	//~ End UFactory Interface
 
 protected:

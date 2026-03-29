@@ -42,7 +42,7 @@ UObject* UPixelComponentFactory::FactoryCreateText(
 	const TCHAR* BufferEnd,
 	FFeedbackContext* Warn)
 {
-	const FString CurrentFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
+	const FString ImportFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
 	const FString FileContent = FString(BufferEnd - Buffer, Buffer);
 
 	UE_LOG(LogPixelComponentFactory, Log, TEXT("Importing PixelComponentAsset: %s"), *InName.ToString());
@@ -51,7 +51,7 @@ UObject* UPixelComponentFactory::FactoryCreateText(
 
 	if (Asset)
 	{
-		FindAndLinkSourceTexture(CurrentFilename, Asset, Warn);
+		FindAndLinkSourceTexture(ImportFilename, Asset, Warn);
 
 		Asset->RefreshNormalizedUVs();
 
@@ -82,14 +82,14 @@ UObject* UPixelComponentFactory::FactoryCreateBinary(
 	const uint8* BufferEnd,
 	FFeedbackContext* Warn)
 {
-	const FString CurrentFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
-	const FString Extension = FPaths::GetExtension(CurrentFilename).ToLower();
+	const FString ImportFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
+	const FString Extension = FPaths::GetExtension(ImportFilename).ToLower();
 
 	UE_LOG(LogPixelComponentFactory, Log, TEXT("Importing PixelComponentAsset (Binary): %s"), *InName.ToString());
 
 	if (Extension == TEXT("png"))
 	{
-		UPixelComponentAsset* Asset = CreateAssetFromPNG(InParent, InName, CurrentFilename, Warn);
+		UPixelComponentAsset* Asset = CreateAssetFromPNG(InParent, InName, ImportFilename, Warn);
 
 		if (Asset)
 		{
