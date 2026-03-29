@@ -16,11 +16,12 @@ DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentFactory, Log, All);
 
 UPixelComponentFactory::UPixelComponentFactory()
 {
-	// Configure factory for .json files
+	// Configure factory for .json and .png files
 	SupportedExtensions.Add(TEXT("json"));
+	SupportedExtensions.Add(TEXT("png"));
 
 	bEditorImport = true;
-	bText = true;
+	bText = true;  // JSON is text, but we'll handle PNG in FactoryCreateBinary
 
 	// Set supported class to PixelComponentAsset
 	SupportedClass = UPixelComponentAsset::StaticClass();
@@ -74,6 +75,117 @@ UObject* UPixelComponentFactory::FactoryCreateText(
 	}
 
 	return nullptr;
+}
+
+UObject* UPixelComponentFactory::FactoryCreateBinary(
+	UClass* InClass,
+	UObject* InParent,
+	FName InName,
+	EObjectFlags Flags,
+	UObject* Context,
+	const TCHAR* Type,
+	const uint8*& Buffer,
+	const uint8* BufferEnd,
+	FFeedbackContext* Warn)
+{
+	// Get the file path from the import context
+	const FString CurrentFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
+	const FString Extension = FPaths::GetExtension(CurrentFilename).ToLower();
+
+	UE_LOG(LogPixelComponentFactory, Log, TEXT("Importing PixelComponentAsset (Binary): %s"), *InName.ToString());
+
+	// Handle PNG import
+	if (Extension == TEXT("png"))
+	{
+		UPixelComponentAsset* Asset = CreateAssetFromPNG(InParent, InName, CurrentFilename, Warn);
+
+		if (Asset)
+		{
+			// Refresh UV calculations after texture is linked
+			Asset->RefreshNormalizedUVs();
+
+			// Validate the asset
+			if (!Asset->ValidateAsset())
+			{
+				UE_LOG(LogPixelComponentFactory, Warning, TEXT("Asset %s has validation issues"), *InName.ToString());
+			}
+
+			Asset->AddToRoot();
+			return Asset;
+		}
+	}
+
+	return nullptr;
+}
+
+UPixelComponentAsset* UPixelComponentFactory::CreateAssetFromPNG(
+	UObject* InParent,
+	FName InName,
+	const FString& TexturePath,
+	FFeedbackContext* Warn)
+{
+	if (!FPaths::FileExists(TexturePath))
+	{
+		UE_LOG(LogPixelComponentFactory, Error, TEXT("PNG file does not exist: %s"), *TexturePath);
+		if (Warn)
+		{
+			Warn->Logf(ELogVerbosity::Error, TEXT("PixelComponent: PNG file not found: %s"), *TexturePath);
+		}
+		return nullptr;
+	}
+
+	// Create the asset
+	UPixelComponentAsset* Asset = NewObject<UPixelComponentAsset>(InParent, InName, RF_Public | RF_Standalone);
+	Asset->AddToRoot();
+
+	// Set asset name from filename
+	Asset->SetAssetName(FPaths::GetBaseFilename(TexturePath));
+
+	UE_LOG(LogPixelComponentFactory, Log, TEXT("Creating asset from PNG: %s"), *TexturePath);
+
+	// Convert to Unreal package path
+	FString FullPath = FPaths::ConvertRelativePathToFull(TexturePath);
+	FString RelativePath = FullPath;
+	FPaths::MakePathRelativeTo(RelativePath, *FPaths::ProjectContentDir());
+	const FString AssetPath = TEXT("/Game/") + FPaths::GetBaseFilename(RelativePath);
+
+	UE_LOG(LogPixelComponentFactory, Log, TEXT("Loading texture from package path: %s"), *AssetPath);
+
+	// Try to find existing loaded object first
+	UObject* ExistingObject = FindObject<UObject>(nullptr, *AssetPath);
+
+	if (!ExistingObject)
+	{
+		// Try to load from disk using StaticLoadObject
+		ExistingObject = StaticLoadObject(UTexture2D::StaticClass(), nullptr, *AssetPath);
+	}
+
+	if (ExistingObject && ExistingObject->IsA<UTexture2D>())
+	{
+		UTexture2D* Texture = Cast<UTexture2D>(ExistingObject);
+		Asset->SetSourceTexture(Texture);
+
+		UE_LOG(LogPixelComponentFactory, Log, TEXT("Successfully loaded texture: %s"), *Texture->GetName());
+		UE_LOG(LogPixelComponentFactory, Verbose, TEXT("Texture dimensions: %dx%d"),
+			static_cast<int32>(Texture->GetSurfaceWidth()),
+			static_cast<int32>(Texture->GetSurfaceHeight()));
+
+		// Configure texture for pixel art (point filtering)
+		Texture->Filter = TF_Nearest;
+		Texture->UpdateResource();
+
+		UE_LOG(LogPixelComponentFactory, Log, TEXT("Created basic PixelComponentAsset (no slices/animations)"));
+		return Asset;
+	}
+	else
+	{
+		UE_LOG(LogPixelComponentFactory, Error, TEXT("Failed to load texture: %s"), *TexturePath);
+		if (Warn)
+		{
+			Warn->Logf(ELogVerbosity::Error, TEXT("PixelComponent: Could not load texture '%s'. Import the PNG first."), *TexturePath);
+		}
+		return nullptr;
+	}
 }
 
 UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(

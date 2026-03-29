@@ -11,6 +11,7 @@
 #include "PixelComponentMaterialLibrary.h"
 #include "PixelComponentSettings.h"
 #include "PixelImage.h"
+#include "PixelComponentAssetFactory.h"
 
 /**
  * FPixelComponentModule

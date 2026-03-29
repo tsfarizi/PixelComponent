@@ -66,6 +66,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	const FString& GetAssetName() const { return AssetName; }
 
+	/**
+	 * Set the asset name.
+	 * @param NewName The new asset name
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
+	void SetAssetName(const FString& NewName) { AssetName = NewName; }
+
 	// ========================================================================
 	// Slice Data Access
 	// ========================================================================

@@ -176,23 +176,30 @@ bool FPixelComponentMaterialLibrary::SendSliceUVToMaterial(
 		return false;
 	}
 
+	// Get UV rect - will return full UVs (0,0,1,1) if slice not found or empty
 	const FPixelUVRect UVRect = Asset->GetSliceNormalizedUVRect(SliceName);
 
-	if (UVRect.IsValid())
-	{
-		MaterialInstance->SetVectorParameterValue(
-			Param_SliceUVRect,
-			FLinearColor(UVRect.MinX, UVRect.MinY, UVRect.MaxX, UVRect.MaxY)
-		);
+	// Always send UV parameters, even if using fallback (0,0,1,1)
+	// This ensures the image renders correctly even without slice data
+	MaterialInstance->SetVectorParameterValue(
+		Param_SliceUVRect,
+		FLinearColor(UVRect.MinX, UVRect.MinY, UVRect.MaxX, UVRect.MaxY)
+	);
 
-		UE_LOG(LogPixelComponentMaterial, Verbose, 
+	if (SliceName.IsEmpty() || Asset->GetSliceCount() == 0)
+	{
+		UE_LOG(LogPixelComponentMaterial, Verbose,
+			TEXT("Sent full texture UVs (no slice specified): (%.4f, %.4f) - (%.4f, %.4f)"),
+			UVRect.MinX, UVRect.MinY, UVRect.MaxX, UVRect.MaxY);
+	}
+	else
+	{
+		UE_LOG(LogPixelComponentMaterial, Verbose,
 			TEXT("Sent slice UVs for '%s': (%.4f, %.4f) - (%.4f, %.4f)"),
 			*SliceName, UVRect.MinX, UVRect.MinY, UVRect.MaxX, UVRect.MaxY);
-
-		return true;
 	}
 
-	return false;
+	return true;
 }
 
 bool FPixelComponentMaterialLibrary::SendNineSliceCenterUVToMaterial(

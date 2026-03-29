@@ -8,19 +8,19 @@
 
 /**
  * UPixelComponentFactory
- * 
- * Factory class for importing Aseprite JSON files (.json) into UPixelComponentAsset.
- * 
+ *
+ * Factory class for importing Aseprite JSON files (.json) and PNG images
+ * into UPixelComponentAsset.
+ *
  * Usage:
- * 1. Place your Aseprite-exported JSON file in the Content folder
- * 2. Ensure the corresponding PNG file is in the same directory
- * 3. Import the JSON file through the Content Browser
- * 4. The factory will automatically parse the JSON and link the texture
- * 
+ * 1. Import PNG directly for simple pixel art assets (no slices/animations)
+ * 2. Import Aseprite JSON for full-featured assets with slices and animations
+ * 3. The factory will automatically link textures and parse metadata
+ *
  * The factory supports:
- * - Automatic detection of .json extension for Aseprite files
+ * - Direct PNG import for standard pixel art assets
+ * - Aseprite JSON import with automatic texture linking
  * - Parsing of slice data including 9-slice margins
- * - Automatic linking of source texture (PNG) if present
  * - Layer metadata extraction
  * - Animation tag and frame data parsing
  */
@@ -43,6 +43,17 @@ public:
 		const TCHAR* Type,
 		const TCHAR*& Buffer,
 		const TCHAR* BufferEnd,
+		FFeedbackContext* Warn
+	) override;
+	virtual UObject* FactoryCreateBinary(
+		UClass* InClass,
+		UObject* InParent,
+		FName InName,
+		EObjectFlags Flags,
+		UObject* Context,
+		const TCHAR* Type,
+		const uint8*& Buffer,
+		const uint8* BufferEnd,
 		FFeedbackContext* Warn
 	) override;
 	//~ End UFactory Interface
@@ -75,6 +86,23 @@ public:
 	static bool FindAndLinkSourceTexture(
 		const FString& JsonFilePath,
 		class UPixelComponentAsset* Asset,
+		FFeedbackContext* Warn
+	);
+
+	/**
+	 * Create PixelComponentAsset from PNG file.
+	 * Creates a basic asset with texture reference but no slices or animations.
+	 *
+	 * @param InParent Parent object for the new asset
+	 * @param InName Name for the new asset
+	 * @param TexturePath Path to the texture file
+	 * @param Warn Feedback context for logging
+	 * @return The created asset
+	 */
+	static class UPixelComponentAsset* CreateAssetFromPNG(
+		UObject* InParent,
+		FName InName,
+		const FString& TexturePath,
 		FFeedbackContext* Warn
 	);
 

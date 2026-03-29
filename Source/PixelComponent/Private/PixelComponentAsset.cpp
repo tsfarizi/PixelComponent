@@ -154,12 +154,21 @@ FPixelUVRect UPixelComponentAsset::ComputeNormalizedUVs(const FPixelRect& PixelR
 
 FPixelUVRect UPixelComponentAsset::GetSliceNormalizedUVRect(const FString& SliceName) const
 {
+	// Fallback: If SliceName is empty or asset has no slices, return full texture UVs
+	if (SliceName.IsEmpty() || Slices.Num() == 0)
+	{
+		return FPixelUVRect(0.0f, 0.0f, 1.0f, 1.0f);
+	}
+
 	const FSliceData* Slice = FindSliceByName(SliceName);
 	if (Slice)
 	{
 		return Slice->NormalizedUVRect;
 	}
-	return FPixelUVRect();
+
+	// Fallback: If slice not found, return full texture UVs
+	UE_LOG(LogPixelComponentAsset, Warning, TEXT("Slice '%s' not found, returning full UVs"), *SliceName);
+	return FPixelUVRect(0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 FPixelUVRect UPixelComponentAsset::GetNineSliceCenterUVRect(const FString& SliceName) const

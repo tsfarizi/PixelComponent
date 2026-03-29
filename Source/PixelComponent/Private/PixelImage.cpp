@@ -191,12 +191,14 @@ void UPixelImage::SendMaterialParameters()
 	// Send texture dimensions (automatically retrieves from SourceTexture)
 	FPixelComponentMaterialLibrary::SendTextureDimensionsToMaterial(PixelAsset, DynamicMaterialInstance);
 
-	// Send slice UV coordinates if a target slice is specified
+	// Send slice UV coordinates
+	// If TargetSlice is empty, the library will send full UVs (0,0,1,1) automatically
+	// This ensures the entire texture is rendered for assets without slices
+	FPixelComponentMaterialLibrary::SendSliceUVToMaterial(PixelAsset, TargetSlice, DynamicMaterialInstance);
+
+	// Send 9-slice data if a target slice is specified and has 9-slice margins
 	if (!TargetSlice.IsEmpty())
 	{
-		FPixelComponentMaterialLibrary::SendSliceUVToMaterial(PixelAsset, TargetSlice, DynamicMaterialInstance);
-		
-		// Also send 9-slice data if the slice has 9-slice margins
 		const FSliceData* Slice = PixelAsset->FindSliceByName(TargetSlice);
 		if (Slice && Slice->bIsNineSlice)
 		{
@@ -206,14 +208,15 @@ void UPixelImage::SendMaterialParameters()
 	}
 	else
 	{
-		// Send default 9-slice data if available
+		// Send default 9-slice data if available (for assets with default margins)
 		FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(PixelAsset, DynamicMaterialInstance, true);
 	}
 
 	// Send pivot point if needed
 	FPixelComponentMaterialLibrary::SendPivotToMaterial(PixelAsset, TargetSlice, DynamicMaterialInstance);
 
-	UE_LOG(LogPixelImage, Verbose, TEXT("Sent material parameters for PixelImage"));
+	UE_LOG(LogPixelImage, Verbose, TEXT("Sent material parameters for PixelImage (Slice: %s)"), 
+		TargetSlice.IsEmpty() ? TEXT("<full texture>") : *TargetSlice);
 }
 
 bool UPixelImage::ValidateConfiguration() const
