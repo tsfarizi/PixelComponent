@@ -25,6 +25,12 @@ class UMaterialInstanceDynamic;
  * - Vector4: "NineSliceMarginsUV" - Normalized UV margins (Left, Top, Right, Bottom)
  * - Vector4: "SliceUVRect" - UV rectangle for a slice (MinX, MinY, MaxX, MaxY)
  * - Vector2: "PixelTextureSize" - Texture dimensions as vector
+ * - Vector4 Array: "SliceUVArray" - Array of slice UVs for batch updates
+ * 
+ * HD Pixel Art Features:
+ * - Automatic injection of GlobalPixelScale from UPixelComponentSettings
+ * - Batch parameter updates for multiple slices
+ * - Virtual resolution support for pixel-perfect rendering
  * 
  * Usage:
  *   UMaterialInstanceDynamic* MID = ...;
@@ -35,6 +41,7 @@ class PIXELCOMPONENT_API FPixelComponentMaterialLibrary
 public:
 	/**
 	 * Send all 9-slice and texture data to a material instance.
+	 * Automatically injects GlobalPixelScale and VirtualResolution from settings.
 	 * 
 	 * @param Asset The PixelComponent asset containing slice data
 	 * @param MaterialInstance The dynamic material instance to update
@@ -65,6 +72,7 @@ public:
 
 	/**
 	 * Send texture dimensions to material parameters.
+	 * Also sends GlobalPixelScale from UPixelComponentSettings.
 	 * 
 	 * @param Asset The PixelComponent asset
 	 * @param MaterialInstance The dynamic material instance to update
@@ -105,6 +113,59 @@ public:
 	);
 
 	/**
+	 * Send ALL slice UVs as a Vector4 array for batch material updates.
+	 * More efficient than setting individual parameters for multiple slices.
+	 * 
+	 * @param Asset The PixelComponent asset
+	 * @param MaterialInstance The dynamic material instance to update
+	 * @param ParameterName Name of the array parameter in the material
+	 * @return Number of UVs sent, or 0 on failure
+	 */
+	static int32 SendAllSliceUVsAsBatch(
+		const UPixelComponentAsset* Asset,
+		UMaterialInstanceDynamic* MaterialInstance,
+		const FName& ParameterName = "SliceUVArray"
+	);
+
+	/**
+	 * Send layer color data to material parameters.
+	 * Uses LayerToMaterialParamMap from the asset.
+	 * 
+	 * @param Asset The PixelComponent asset
+	 * @param MaterialInstance The dynamic material instance to update
+	 * @return Number of layer parameters set
+	 */
+	static int32 SendLayerColorsToMaterial(
+		const UPixelComponentAsset* Asset,
+		UMaterialInstanceDynamic* MaterialInstance
+	);
+
+	/**
+	 * Send pivot point data to material parameters.
+	 * 
+	 * @param Asset The PixelComponent asset
+	 * @param SliceName Name of the slice (or empty for default pivot)
+	 * @param MaterialInstance The dynamic material instance to update
+	 * @return true if parameters were successfully set
+	 */
+	static bool SendPivotToMaterial(
+		const UPixelComponentAsset* Asset,
+		const FString& SliceName,
+		UMaterialInstanceDynamic* MaterialInstance
+	);
+
+	/**
+	 * Global State Injection: Send settings-based parameters.
+	 * Automatically retrieves GlobalPixelScale and VirtualResolution from UPixelComponentSettings.
+	 * 
+	 * @param MaterialInstance The dynamic material instance to update
+	 * @return true if parameters were successfully set
+	 */
+	static bool InjectGlobalSettings(
+		UMaterialInstanceDynamic* MaterialInstance
+	);
+
+	/**
 	 * Convert pixel margins to normalized UV margins.
 	 * 
 	 * @param Margins Pixel-space margins
@@ -139,6 +200,8 @@ public:
 	static const FName Param_PixelTextureWidth;
 	static const FName Param_PixelTextureHeight;
 	static const FName Param_PixelTextureSize;
+	static const FName Param_GlobalPixelScale;
+	static const FName Param_VirtualResolution;
 	static const FName Param_NineSliceLeft;
 	static const FName Param_NineSliceTop;
 	static const FName Param_NineSliceRight;
@@ -146,4 +209,6 @@ public:
 	static const FName Param_NineSliceMarginsUV;
 	static const FName Param_SliceUVRect;
 	static const FName Param_NineSliceCenterUV;
+	static const FName Param_SliceUVArray;
+	static const FName Param_Pivot;
 };

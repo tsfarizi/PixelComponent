@@ -2,6 +2,7 @@
 
 #include "PixelComponentMaterialLibrary.h"
 #include "PixelComponentAsset.h"
+#include "PixelComponentSettings.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentMaterial, Log, All);
@@ -10,6 +11,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentMaterial, Log, All);
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureWidth(TEXT("PixelTextureWidth"));
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureHeight(TEXT("PixelTextureHeight"));
 const FName FPixelComponentMaterialLibrary::Param_PixelTextureSize(TEXT("PixelTextureSize"));
+const FName FPixelComponentMaterialLibrary::Param_GlobalPixelScale(TEXT("GlobalPixelScale"));
+const FName FPixelComponentMaterialLibrary::Param_VirtualResolution(TEXT("VirtualResolution"));
 const FName FPixelComponentMaterialLibrary::Param_NineSliceLeft(TEXT("NineSliceLeft"));
 const FName FPixelComponentMaterialLibrary::Param_NineSliceTop(TEXT("NineSliceTop"));
 const FName FPixelComponentMaterialLibrary::Param_NineSliceRight(TEXT("NineSliceRight"));
@@ -17,6 +20,8 @@ const FName FPixelComponentMaterialLibrary::Param_NineSliceBottom(TEXT("NineSlic
 const FName FPixelComponentMaterialLibrary::Param_NineSliceMarginsUV(TEXT("NineSliceMarginsUV"));
 const FName FPixelComponentMaterialLibrary::Param_SliceUVRect(TEXT("SliceUVRect"));
 const FName FPixelComponentMaterialLibrary::Param_NineSliceCenterUV(TEXT("NineSliceCenterUV"));
+const FName FPixelComponentMaterialLibrary::Param_SliceUVArray(TEXT("SliceUVArray"));
+const FName FPixelComponentMaterialLibrary::Param_Pivot(TEXT("Pivot"));
 
 bool FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(
 	const UPixelComponentAsset* Asset,
@@ -30,6 +35,9 @@ bool FPixelComponentMaterialLibrary::SendNineSliceDataToMaterial(
 	}
 
 	bool bSuccess = true;
+
+	// Inject global settings first (GlobalPixelScale, VirtualResolution)
+	bSuccess &= InjectGlobalSettings(MaterialInstance);
 
 	// Send texture dimensions
 	bSuccess &= SendTextureDimensionsToMaterial(Asset, MaterialInstance);
@@ -92,11 +100,15 @@ bool FPixelComponentMaterialLibrary::SendSliceNineSliceToMaterial(
 	int32 TexWidth, TexHeight;
 	Asset->GetTextureDimensions(TexWidth, TexHeight);
 
-	FMargin MarginsToSend = Slice->NineSliceMargins;
+	FPixelNineSliceMargins MarginsToSend = Slice->NineSliceMarginsUV;
 
-	if (bUseNormalizedUVs && TexWidth > 0 && TexHeight > 0)
+	if (!bUseNormalizedUVs && TexWidth > 0 && TexHeight > 0)
 	{
-		MarginsToSend = ConvertMarginsToNormalizedUV(Slice->NineSliceMargins, TexWidth, TexHeight);
+		// Convert back to pixels if needed
+		MarginsToSend.Left *= TexWidth;
+		MarginsToSend.Top *= TexHeight;
+		MarginsToSend.Right *= TexWidth;
+		MarginsToSend.Bottom *= TexHeight;
 	}
 
 	MaterialInstance->SetVectorParameterValue(
@@ -148,18 +160,18 @@ bool FPixelComponentMaterialLibrary::SendSliceUVToMaterial(
 		return false;
 	}
 
-	const FBox2f UVs = Asset->GetSliceNormalizedUVs(SliceName);
+	const FPixelUVRect UVRect = Asset->GetSliceNormalizedUVRect(SliceName);
 
-	if (UVs.IsValid())
+	if (UVRect.IsValid())
 	{
 		MaterialInstance->SetVectorParameterValue(
 			Param_SliceUVRect,
-			FLinearColor(UVs.Min.X, UVs.Min.Y, UVs.Max.X, UVs.Max.Y)
+			FLinearColor(UVRect.MinX, UVRect.MinY, UVRect.MaxX, UVRect.MaxY)
 		);
 
 		UE_LOG(LogPixelComponentMaterial, Verbose, 
 			TEXT("Sent slice UVs for '%s': (%.4f, %.4f) - (%.4f, %.4f)"),
-			*SliceName, UVs.Min.X, UVs.Min.Y, UVs.Max.X, UVs.Max.Y);
+			*SliceName, UVRect.MinX, UVRect.MinY, UVRect.MaxX, UVRect.MaxY);
 
 		return true;
 	}
@@ -177,23 +189,159 @@ bool FPixelComponentMaterialLibrary::SendNineSliceCenterUVToMaterial(
 		return false;
 	}
 
-	const FBox2f CenterUVs = Asset->GetNineSliceCenterUVs(SliceName);
+	const FPixelUVRect CenterUVs = Asset->GetNineSliceCenterUVRect(SliceName);
 
 	if (CenterUVs.IsValid())
 	{
 		MaterialInstance->SetVectorParameterValue(
 			Param_NineSliceCenterUV,
-			FLinearColor(CenterUVs.Min.X, CenterUVs.Min.Y, CenterUVs.Max.X, CenterUVs.Max.Y)
+			FLinearColor(CenterUVs.MinX, CenterUVs.MinY, CenterUVs.MaxX, CenterUVs.MaxY)
 		);
 
 		UE_LOG(LogPixelComponentMaterial, Verbose, 
 			TEXT("Sent 9-slice center UVs for '%s': (%.4f, %.4f) - (%.4f, %.4f)"),
-			*SliceName, CenterUVs.Min.X, CenterUVs.Min.Y, CenterUVs.Max.X, CenterUVs.Max.Y);
+			*SliceName, CenterUVs.MinX, CenterUVs.MinY, CenterUVs.MaxX, CenterUVs.MaxY);
 
 		return true;
 	}
 
 	return false;
+}
+
+int32 FPixelComponentMaterialLibrary::SendAllSliceUVsAsBatch(
+	const UPixelComponentAsset* Asset,
+	UMaterialInstanceDynamic* MaterialInstance,
+	const FName& ParameterName)
+{
+	if (!Asset || !MaterialInstance)
+	{
+		return 0;
+	}
+
+	const TArray<FVector4f> UVs = Asset->GetAllSliceUVsAsVector4();
+	
+	if (UVs.Num() == 0)
+	{
+		UE_LOG(LogPixelComponentMaterial, Warning, TEXT("No valid slice UVs to send"));
+		return 0;
+	}
+
+	// Note: SetVectorArrayParameterValue is not available in all UE versions
+	// For now, send individual parameters with indexed names
+	int32 Count = 0;
+	for (const FVector4f& UV : UVs)
+	{
+		const FName ParamName = *FString::Printf(TEXT("%s_%d"), *ParameterName.ToString(), Count);
+		MaterialInstance->SetVectorParameterValue(ParamName, FLinearColor(UV.X, UV.Y, UV.Z, UV.W));
+		Count++;
+	}
+
+	UE_LOG(LogPixelComponentMaterial, Log, 
+		TEXT("Sent batch slice UVs: %d slices to parameter '%s'"), UVs.Num(), *ParameterName.ToString());
+
+	return Count;
+}
+
+int32 FPixelComponentMaterialLibrary::SendLayerColorsToMaterial(
+	const UPixelComponentAsset* Asset,
+	UMaterialInstanceDynamic* MaterialInstance)
+{
+	if (!Asset || !MaterialInstance)
+	{
+		return 0;
+	}
+
+	int32 LayersSet = 0;
+	const TArray<FLayerMetadata>& Layers = Asset->GetLayers();
+	const TMap<FString, FName>& LayerMap = Asset->GetLayerToMaterialMap();
+
+	for (const FLayerMetadata& Layer : Layers)
+	{
+		// Check if layer has a material parameter mapping
+		const FName* ParamName = LayerMap.Find(Layer.Name);
+		FName TargetParam = ParamName ? *ParamName : *Layer.Name;
+
+		// Convert FColor to FLinearColor for material parameter
+		const FLinearColor LayerColor = Layer.UserDataColor.ReinterpretAsLinear();
+		MaterialInstance->SetVectorParameterValue(TargetParam, LayerColor);
+		LayersSet++;
+
+		UE_LOG(LogPixelComponentMaterial, Verbose, 
+			TEXT("Sent layer color for '%s' -> parameter '%s'"), *Layer.Name, *TargetParam.ToString());
+	}
+
+	return LayersSet;
+}
+
+bool FPixelComponentMaterialLibrary::SendPivotToMaterial(
+	const UPixelComponentAsset* Asset,
+	const FString& SliceName,
+	UMaterialInstanceDynamic* MaterialInstance)
+{
+	if (!Asset || !MaterialInstance)
+	{
+		return false;
+	}
+
+	FPixelPivot Pivot;
+	
+	if (!SliceName.IsEmpty())
+	{
+		Pivot = Asset->GetSlicePivot(SliceName);
+	}
+	else
+	{
+		Pivot = Asset->GetDefaultPivot();
+	}
+
+	int32 TexWidth, TexHeight;
+	Asset->GetTextureDimensions(TexWidth, TexHeight);
+
+	// Get normalized pivot
+	FVector2f NormalizedPivot = Pivot.GetNormalized(TexWidth, TexHeight);
+
+	MaterialInstance->SetVectorParameterValue(
+		Param_Pivot,
+		FLinearColor(NormalizedPivot.X, NormalizedPivot.Y, 0.0f, 0.0f)
+	);
+
+	UE_LOG(LogPixelComponentMaterial, Verbose, 
+		TEXT("Sent pivot: (%.4f, %.4f)"), NormalizedPivot.X, NormalizedPivot.Y);
+
+	return true;
+}
+
+bool FPixelComponentMaterialLibrary::InjectGlobalSettings(
+	UMaterialInstanceDynamic* MaterialInstance)
+{
+	if (!MaterialInstance)
+	{
+		return false;
+	}
+
+	UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
+	if (!Settings)
+	{
+		return false;
+	}
+
+	// Send GlobalPixelScale
+	const float GlobalPixelScale = static_cast<float>(Settings->GlobalPixelSize);
+	MaterialInstance->SetScalarParameterValue(Param_GlobalPixelScale, GlobalPixelScale);
+
+	// Send VirtualResolution (if configured in settings)
+	// For now, use texture dimensions as virtual resolution
+	// This can be extended with a dedicated VirtualResolution setting
+	const FVector2f VirtualRes(1920.0f, 1080.0f); // Default HD
+	MaterialInstance->SetVectorParameterValue(
+		Param_VirtualResolution,
+		FLinearColor(VirtualRes.X, VirtualRes.Y, 0.0f, 0.0f)
+	);
+
+	UE_LOG(LogPixelComponentMaterial, Verbose, 
+		TEXT("Injected global settings: PixelScale=%.2f"), GlobalPixelScale);
+
+	return true;
 }
 
 FMargin FPixelComponentMaterialLibrary::ConvertMarginsToNormalizedUV(

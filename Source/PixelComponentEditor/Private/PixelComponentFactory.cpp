@@ -17,15 +17,12 @@ UPixelComponentFactory::UPixelComponentFactory()
 {
 	// Configure factory for .json files
 	SupportedExtensions.Add(TEXT("json"));
-	
+
 	bEditorImport = true;
 	bText = true;
-	
+
 	// Set supported class to PixelComponentAsset
 	SupportedClass = UPixelComponentAsset::StaticClass();
-	
-	// Import priority
-	Priority = 50;
 }
 
 bool UPixelComponentFactory::FactoryCanImport(const FString& Filename)
@@ -46,7 +43,7 @@ UObject* UPixelComponentFactory::FactoryCreateText(
 	FFeedbackContext* Warn)
 {
 	// Get the file path from the import context
-	const FString CurrentFilename = FLinkerLoadGetCurrentFilename();
+	const FString CurrentFilename = (Context && Context->GetOuter()) ? Context->GetPathName() : TEXT("");
 	const FString FileContent = FString(BufferEnd - Buffer, Buffer);
 
 	UE_LOG(LogPixelComponentFactory, Log, TEXT("Importing PixelComponentAsset: %s"), *InName.ToString());
@@ -57,9 +54,19 @@ UObject* UPixelComponentFactory::FactoryCreateText(
 	{
 		// Try to link the source texture automatically
 		FindAndLinkSourceTexture(CurrentFilename, Asset, Warn);
-		
+
 		// Refresh UV calculations after texture is linked
 		Asset->RefreshNormalizedUVs();
+
+		// Validate the asset
+		if (!Asset->ValidateAsset())
+		{
+			UE_LOG(LogPixelComponentFactory, Warning, TEXT("Asset %s has validation issues"), *InName.ToString());
+			if (Warn)
+			{
+				Warn->Logf(ELogVerbosity::Warning, TEXT("PixelComponent: Asset validation warnings - check output log"));
+			}
+		}
 
 		Asset->AddToRoot();
 		return Asset;
@@ -74,7 +81,7 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 	FName InName,
 	FFeedbackContext* Warn)
 {
-	// Parse JSON using TJsonReader
+	// Parse JSON using TJsonReader - using efficient string handling
 	TSharedPtr<FJsonObject> JsonObject;
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonContent);
 
@@ -103,7 +110,15 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 	UPixelComponentAsset* Asset = NewObject<UPixelComponentAsset>(InParent, InName, RF_Public | RF_Standalone);
 	Asset->AddToRoot();
 
-	// Parse slices
+	// Parse metadata first (asset name, default pivot, etc.)
+	FAsepriteParseResult MetaResult = Asset->ParseMetadataFromJson(JsonObject);
+	if (!MetaResult.bSuccess)
+	{
+		UE_LOG(LogPixelComponentFactory, Warning, TEXT("Metadata parse warning: %s"), *MetaResult.ErrorMessage);
+	}
+	MetaResult.LogResults(TEXT("Metadata"));
+
+	// Parse slices with pre-calculated UVs
 	FAsepriteParseResult SlicesResult = Asset->ParseSlicesFromJson(JsonObject);
 	if (!SlicesResult.bSuccess)
 	{
@@ -114,15 +129,7 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 		}
 		// Continue anyway - slices are optional
 	}
-
-	for (const FString& Warning : SlicesResult.Warnings)
-	{
-		UE_LOG(LogPixelComponentFactory, Warning, TEXT("Slice parse warning: %s"), *Warning);
-		if (Warn)
-		{
-			Warn->Logf(ELogVerbosity::Warning, TEXT("PixelComponent: %s"), *Warning);
-		}
-	}
+	SlicesResult.LogResults(TEXT("Slices"));
 
 	// Parse layers
 	FAsepriteParseResult LayersResult = Asset->ParseLayersFromJson(JsonObject);
@@ -130,57 +137,41 @@ UPixelComponentAsset* UPixelComponentFactory::ParseAsepriteJson(
 	{
 		UE_LOG(LogPixelComponentFactory, Error, TEXT("Failed to parse layers: %s"), *LayersResult.ErrorMessage);
 	}
+	LayersResult.LogResults(TEXT("Layers"));
 
-	for (const FString& Warning : LayersResult.Warnings)
-	{
-		UE_LOG(LogPixelComponentFactory, Warning, TEXT("Layer parse warning: %s"), *Warning);
-	}
-
-	// Parse animation data
+	// Parse animation data (including frame tags)
 	FAsepriteParseResult AnimResult = Asset->ParseAnimationFromJson(JsonObject);
 	if (!AnimResult.bSuccess)
 	{
 		UE_LOG(LogPixelComponentFactory, Error, TEXT("Failed to parse animation: %s"), *AnimResult.ErrorMessage);
 	}
+	AnimResult.LogResults(TEXT("Animation"));
 
-	// Extract texture dimensions from JSON metadata
+	// Extract texture dimensions from JSON metadata for pre-calculated UVs
 	int32 TexWidth = 0, TexHeight = 0;
 	if (ExtractTextureDimensions(JsonObject, TexWidth, TexHeight))
 	{
-		UE_LOG(LogPixelComponentFactory, Verbose, 
+		UE_LOG(LogPixelComponentFactory, Verbose,
 			TEXT("Extracted texture dimensions from JSON: %dx%d"), TexWidth, TexHeight);
-		
-		// Store original dimensions in asset (before scaling)
-		Asset->OriginalTextureWidth = TexWidth;
-		Asset->OriginalTextureHeight = TexHeight;
 
-		// Apply global pixel size scaling if enabled
-		UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
-		if (Settings && Settings->bEnableAutoScaleOnImport)
-		{
-			const float ScaleFactor = UPixelComponentSettings::CalculateScaleFactor(FMath::Max(TexWidth, TexHeight));
-			Asset->AppliedScaleFactor = ScaleFactor;
-			Asset->bIsScaled = !FMath::IsNearlyEqual(ScaleFactor, 1.0f);
+		// Set texture dimensions from import (handles scaling internally)
+		Asset->SetTextureDimensionsFromImport(TexWidth, TexHeight, true);
 
-			if (Asset->bIsScaled)
-			{
-				UE_LOG(LogPixelComponentFactory, Log, 
-					TEXT("Applying pixel size scaling: %dx%d -> %dx%d (scale: %.2f, global: %dpx)"),
-					TexWidth, TexHeight,
-					FMath::RoundToInt(TexWidth * ScaleFactor),
-					FMath::RoundToInt(TexHeight * ScaleFactor),
-					ScaleFactor,
-					Settings->GlobalPixelSize);
-			}
-		}
+		// Validate texture dimensions match slice data
+		ValidateTextureDimensions(JsonObject, TexWidth, TexHeight, Asset, Warn);
+	}
+	else
+	{
+		UE_LOG(LogPixelComponentFactory, Warning, TEXT("Could not extract texture dimensions from JSON"));
 	}
 
 	UE_LOG(LogPixelComponentFactory, Log, 
-		TEXT("Successfully parsed Aseprite JSON: %s (Slices: %d, Layers: %d, Frames: %d)"),
+		TEXT("Successfully parsed Aseprite JSON: %s (Slices: %d, Layers: %d, Frames: %d, Animations: %d)"),
 		*InName.ToString(), 
 		Asset->GetSlices().Num(), 
 		Asset->GetLayers().Num(),
-		Asset->GetFrames().Num());
+		Asset->GetFrameCount(),
+		Asset->GetAnimationSequences().Num());
 
 	return Asset;
 }
@@ -230,8 +221,9 @@ bool UPixelComponentFactory::FindAndLinkSourceTexture(
 	}
 
 	// Convert to Unreal package path
-	const FString PackagePath = FPaths::ConvertRelativePathToFull(FoundTexturePath);
-	const FString RelativePath = FPaths::MakePathRelativeTo(PackagePath, *FPaths::ProjectContentDir());
+	FString PackagePath = FPaths::ConvertRelativePathToFull(FoundTexturePath);
+	FString RelativePath = PackagePath;
+	FPaths::MakePathRelativeTo(RelativePath, *FPaths::ProjectContentDir());
 	const FString AssetPath = TEXT("/Game/") + FPaths::GetBaseFilename(RelativePath);
 
 	// Try to load the texture
@@ -279,12 +271,12 @@ bool UPixelComponentFactory::ValidateAsepriteSchema(const TSharedPtr<FJsonObject
 	// Check for "meta" object with required fields
 	if (bHasMeta)
 	{
-		const TSharedPtr<FJsonObject>* MetaObject = JsonObject->TryGetField(TEXT("meta")).Get();
-		if (MetaObject && MetaObject->IsValid())
+		const TSharedPtr<FJsonObject> MetaObject = JsonObject->GetObjectField(TEXT("meta"));
+		if (MetaObject)
 		{
 			// Aseprite meta should have "app" or "version" field
-			const bool bHasApp = (*MetaObject)->HasField(TEXT("app"));
-			const bool bHasVersion = (*MetaObject)->HasField(TEXT("version"));
+			const bool bHasApp = MetaObject->HasField(TEXT("app"));
+			const bool bHasVersion = MetaObject->HasField(TEXT("version"));
 			
 			if (bHasApp || bHasVersion)
 			{
@@ -334,11 +326,11 @@ bool UPixelComponentFactory::ExtractTextureDimensions(
 	const TArray<TSharedPtr<FJsonValue>>* FramesArray;
 	if (JsonObject->TryGetArrayField(TEXT("frames"), FramesArray) && FramesArray->Num() > 0)
 	{
-		const TSharedPtr<FJsonObject>* FirstFrame = (*FramesArray)[0]->AsObject();
-		if (FirstFrame && FirstFrame->IsValid())
+		const TSharedPtr<FJsonObject> FirstFrame = (*FramesArray)[0]->AsObject();
+		if (FirstFrame)
 		{
 			const TSharedPtr<FJsonObject>* FrameRectObject;
-			if ((*FirstFrame)->TryGetObjectField(TEXT("frame"), FrameRectObject) && FrameRectObject->IsValid())
+			if (FirstFrame->TryGetObjectField(TEXT("frame"), FrameRectObject) && FrameRectObject)
 			{
 				int32 W, H;
 				if ((*FrameRectObject)->TryGetNumberField(TEXT("w"), W) &&
@@ -353,4 +345,61 @@ bool UPixelComponentFactory::ExtractTextureDimensions(
 	}
 
 	return false;
+}
+
+void UPixelComponentFactory::ValidateTextureDimensions(
+	const TSharedPtr<FJsonObject>& JsonObject,
+	int32 ExpectedWidth,
+	int32 ExpectedHeight,
+	UPixelComponentAsset* Asset,
+	FFeedbackContext* Warn)
+{
+	if (!Asset || !JsonObject.IsValid())
+	{
+		return;
+	}
+
+	// Validate slice bounds are within texture dimensions
+	for (const FSliceData& Slice : Asset->GetSlices())
+	{
+		const int32 SliceRight = Slice.PixelRect.X + Slice.PixelRect.Width;
+		const int32 SliceBottom = Slice.PixelRect.Y + Slice.PixelRect.Height;
+
+		if (SliceRight > ExpectedWidth || SliceBottom > ExpectedHeight)
+		{
+			const FString WarningMsg = FString::Printf(
+				TEXT("Slice '%s' bounds (%d,%d,%d,%d) exceed texture dimensions (%dx%d)"),
+				*Slice.Name,
+				Slice.PixelRect.X, Slice.PixelRect.Y, Slice.PixelRect.Width, Slice.PixelRect.Height,
+				ExpectedWidth, ExpectedHeight);
+
+			UE_LOG(LogPixelComponentFactory, Warning, TEXT("%s"), *WarningMsg);
+			if (Warn)
+			{
+				Warn->Logf(ELogVerbosity::Warning, TEXT("PixelComponent: %s"), *WarningMsg);
+			}
+		}
+
+		// Validate UV coordinates are in [0, 1] range
+		if (Slice.NormalizedUVRect.IsValid())
+		{
+			if (Slice.NormalizedUVRect.MinX < 0.0f || Slice.NormalizedUVRect.MinX > 1.0f ||
+				Slice.NormalizedUVRect.MinY < 0.0f || Slice.NormalizedUVRect.MinY > 1.0f ||
+				Slice.NormalizedUVRect.MaxX < 0.0f || Slice.NormalizedUVRect.MaxX > 1.0f ||
+				Slice.NormalizedUVRect.MaxY < 0.0f || Slice.NormalizedUVRect.MaxY > 1.0f)
+			{
+				const FString WarningMsg = FString::Printf(
+					TEXT("Slice '%s' has UV coordinates outside [0,1] range: (%.4f, %.4f, %.4f, %.4f)"),
+					*Slice.Name,
+					Slice.NormalizedUVRect.MinX, Slice.NormalizedUVRect.MinY,
+					Slice.NormalizedUVRect.MaxX, Slice.NormalizedUVRect.MaxY);
+
+				UE_LOG(LogPixelComponentFactory, Error, TEXT("%s"), *WarningMsg);
+				if (Warn)
+				{
+					Warn->Logf(ELogVerbosity::Error, TEXT("PixelComponent: %s"), *WarningMsg);
+				}
+			}
+		}
+	}
 }

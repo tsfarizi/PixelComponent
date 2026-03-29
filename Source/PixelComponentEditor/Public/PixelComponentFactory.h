@@ -102,4 +102,22 @@ private:
 		int32& OutWidth,
 		int32& OutHeight
 	);
+
+	/**
+	 * Validate texture dimensions against slice data.
+	 * Logs warnings if slice bounds exceed texture dimensions or UVs are out of range.
+	 * 
+	 * @param JsonObject The parsed JSON object
+	 * @param ExpectedWidth Expected texture width
+	 * @param ExpectedHeight Expected texture height
+	 * @param Asset The asset being imported
+	 * @param Warn Feedback context for logging
+	 */
+	static void ValidateTextureDimensions(
+		const TSharedPtr<FJsonObject>& JsonObject,
+		int32 ExpectedWidth,
+		int32 ExpectedHeight,
+		class UPixelComponentAsset* Asset,
+		FFeedbackContext* Warn
+	);
 };
