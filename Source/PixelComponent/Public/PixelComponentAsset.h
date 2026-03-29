@@ -447,6 +447,20 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component")
 	FString AssetName;
 
+	/** 
+	 * Display name for this asset in UI and asset pickers.
+	 * If empty, AssetName is used as fallback.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Metadata", meta = (MultiLine = "false"))
+	FText DisplayName;
+
+	/** 
+	 * Search tags for asset discovery and filtering.
+	 * Comma-separated keywords to improve searchability.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Metadata")
+	FString SearchTags;
+
 	/** All slices defined in the Aseprite file */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component")
 	TArray<FSliceData> Slices;

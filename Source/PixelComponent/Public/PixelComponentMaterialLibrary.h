@@ -224,4 +224,23 @@ public:
 	static const FName Param_NineSliceCenterUV;
 	static const FName Param_SliceUVArray;
 	static const FName Param_Pivot;
+
+	/**
+	 * Discovers all PixelComponentAsset instances in the current project.
+	 * Scans the Asset Registry and returns loaded asset references.
+	 *
+	 * @return Array of all discovered PixelComponentAsset objects
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Utility")
+	static TArray<UPixelComponentAsset*> GetAllAvailablePixelAssets();
+
+	/**
+	 * Discovers all PixelComponentAsset instances with optional name filtering.
+	 * Scans the Asset Registry and returns loaded asset references matching the search term.
+	 *
+	 * @param SearchTerm Optional substring to filter assets by name (case-insensitive)
+	 * @return Array of matching PixelComponentAsset objects
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Utility")
+	static TArray<UPixelComponentAsset*> GetFilteredPixelAssets(const FString& SearchTerm);
 };

@@ -18,7 +18,8 @@ public class PixelComponent : ModuleRules
 			"DeveloperSettings",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"AssetRegistry"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

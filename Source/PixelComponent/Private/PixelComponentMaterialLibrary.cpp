@@ -4,6 +4,8 @@
 #include "PixelComponentAsset.h"
 #include "PixelComponentSettings.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Engine/AssetManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentMaterial, Log, All);
 
@@ -427,4 +429,52 @@ FMargin FPixelComponentMaterialLibrary::ConvertUVMarginsToPixels(
 		UVMargins.Right * static_cast<float>(TextureWidth),
 		UVMargins.Bottom * static_cast<float>(TextureHeight)
 	);
+}
+
+TArray<UPixelComponentAsset*> FPixelComponentMaterialLibrary::GetAllAvailablePixelAssets()
+{
+	return GetFilteredPixelAssets(TEXT(""));
+}
+
+TArray<UPixelComponentAsset*> FPixelComponentMaterialLibrary::GetFilteredPixelAssets(const FString& SearchTerm)
+{
+	TArray<UPixelComponentAsset*> FoundAssets;
+
+	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(FName("AssetRegistry"));
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	TArray<FAssetData> AssetDataList;
+	AssetRegistry.GetAssetsByClass(UPixelComponentAsset::StaticClass()->GetClassPathName(), AssetDataList, true);
+
+	if (AssetDataList.Num() == 0)
+	{
+		UE_LOG(LogPixelComponentMaterial, Log, TEXT("No PixelComponentAsset instances found in project"));
+		return FoundAssets;
+	}
+
+	const bool bHasSearchTerm = !SearchTerm.IsEmpty();
+	const FString SearchTermLower = bHasSearchTerm ? SearchTerm.ToLower() : TEXT("");
+
+	for (const FAssetData& AssetData : AssetDataList)
+	{
+		if (bHasSearchTerm)
+		{
+			const FString AssetName = AssetData.AssetName.ToString();
+			if (!AssetName.ToLower().Contains(SearchTermLower))
+			{
+				continue;
+			}
+		}
+
+		UPixelComponentAsset* Asset = Cast<UPixelComponentAsset>(AssetData.GetAsset());
+		if (Asset)
+		{
+			FoundAssets.Add(Asset);
+		}
+	}
+
+	UE_LOG(LogPixelComponentMaterial, Log, TEXT("Found %d PixelComponentAsset instances (filtered: %d)"),
+		AssetDataList.Num(), FoundAssets.Num());
+
+	return FoundAssets;
 }
