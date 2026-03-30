@@ -14,8 +14,11 @@ UPixelComponent::UPixelComponent()
 	: PixelAsset(nullptr)
 	, bAutoInitializeMaterial(true)
 	, DynamicMaterialInstance(nullptr)
+	, bFixedSize(true)
 {
 	bIsVariable = true;
+	
+	DesiredSize = FVector2f(128.0f, 128.0f);
 }
 
 void UPixelComponent::SynchronizeProperties()
@@ -48,6 +51,11 @@ void UPixelComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChan
 		{
 			RefreshMaterialParameters();
 		}
+	}
+	
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponent, PixelAsset))
+	{
+		CalculateAndApplyDimensions();
 	}
 }
 
@@ -126,6 +134,8 @@ void UPixelComponent::RefreshMaterialParameters()
 	{
 		SendMaterialParameters();
 	}
+	
+	CalculateAndApplyDimensions();
 }
 
 void UPixelComponent::ClearMaterial()
@@ -156,14 +166,28 @@ void UPixelComponent::InitializeMaterialInstance()
 		return;
 	}
 
-	UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
-	if (!Settings || !Settings->DefaultPixelMaterial)
+	UMaterialInterface* BaseMaterial = PixelAsset->GetActiveMaterial();
+	
+	if (!BaseMaterial)
 	{
-		UE_LOG(LogPixelComponent, Error, TEXT("No default pixel material specified in settings"));
-		return;
+		UE_LOG(LogPixelComponent, Log, TEXT("No active material from asset, using default"));
+		
+		static UMaterialInterface* DefaultMaterial = nullptr;
+		if (!DefaultMaterial)
+		{
+			DefaultMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/WorldGridMaterial.WorldGridMaterial"));
+		}
+		
+		BaseMaterial = DefaultMaterial;
+		
+		if (!BaseMaterial)
+		{
+			UE_LOG(LogPixelComponent, Error, TEXT("Failed to load default material"));
+			return;
+		}
 	}
 
-	DynamicMaterialInstance = UMaterialInstanceDynamic::Create(Settings->DefaultPixelMaterial, this);
+	DynamicMaterialInstance = UMaterialInstanceDynamic::Create(BaseMaterial, this);
 
 	if (!DynamicMaterialInstance)
 	{
@@ -264,4 +288,50 @@ void UPixelComponent::ApplyTextureFromAsset()
 	SetBrush(CurrentBrush);
 
 	UE_LOG(LogPixelComponent, Verbose, TEXT("Applied texture from asset: %s"), *SourceTexture->GetName());
+}
+
+void UPixelComponent::CalculateAndApplyDimensions()
+{
+	if (!PixelAsset)
+	{
+		DesiredSize = FVector2f(128.0f, 128.0f);
+		OriginalDimensions = FVector2f(128.0f, 128.0f);
+		return;
+	}
+
+	UTexture2D* SourceTexture = PixelAsset->GetSourceTexture();
+	if (!SourceTexture)
+	{
+		DesiredSize = FVector2f(128.0f, 128.0f);
+		OriginalDimensions = FVector2f(128.0f, 128.0f);
+		return;
+	}
+
+	const int32 OriginalWidth = SourceTexture->GetSurfaceWidth();
+	const int32 OriginalHeight = SourceTexture->GetSurfaceHeight();
+
+	OriginalDimensions = FVector2f(static_cast<float>(OriginalWidth), static_cast<float>(OriginalHeight));
+
+	UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
+	int32 ScaledWidth = OriginalWidth;
+	int32 ScaledHeight = OriginalHeight;
+
+	if (Settings && Settings->bEnableAutoScaleOnImport)
+	{
+		const float ScaleFactor = UPixelComponentSettings::CalculateScaleFactor(FMath::Max(OriginalWidth, OriginalHeight));
+		ScaledWidth = FMath::RoundToInt(static_cast<float>(OriginalWidth) * ScaleFactor);
+		ScaledHeight = FMath::RoundToInt(static_cast<float>(OriginalHeight) * ScaleFactor);
+
+		if (Settings->bSnapToPixelGrid)
+		{
+			const int32 PixelSize = Settings->GlobalPixelSize;
+			ScaledWidth = FMath::RoundToInt(static_cast<float>(ScaledWidth) / PixelSize) * PixelSize;
+			ScaledHeight = FMath::RoundToInt(static_cast<float>(ScaledHeight) / PixelSize) * PixelSize;
+		}
+	}
+
+	DesiredSize = FVector2f(static_cast<float>(ScaledWidth), static_cast<float>(ScaledHeight));
+
+	UE_LOG(LogPixelComponent, Log, TEXT("Calculated fixed dimensions: %.0fx%.0f (original: %.0fx%.0f)"),
+		DesiredSize.X, DesiredSize.Y, OriginalDimensions.X, OriginalDimensions.Y);
 }

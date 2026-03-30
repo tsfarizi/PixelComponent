@@ -18,22 +18,26 @@
  * - Texture source is exclusively from UPixelComponentAsset
  * - No manual texture input allowed
  * - Brush is automatically configured when PixelAsset is assigned
+ * - Widget size is locked to source dimensions (non-resizable)
  *
  * Features:
  * - Automatic material instance creation from settings
  * - Slice UV coordinate injection for sprite sheet regions
  * - 9-slice margin support for scalable UI elements
  * - Palette profile support for dynamic recoloring
+ * - Fixed widget size based on source texture/material dimensions
+ * - Global pixel size scaling applied automatically
  * - Real-time preview in UMG Designer via PostEditChangeProperty
  *
  * Usage:
  * 1. Add "Pixel Component" widget to UMG layout from Palette
  * 2. Assign PixelComponentAsset to PixelAsset property
- * 3. Optionally specify TargetSlice for sprite sheet regions
- * 4. Optionally assign ActivePaletteProfile for color overrides
+ * 3. Widget automatically sizes to match asset dimensions
+ * 4. Optionally specify TargetSlice for sprite sheet regions
+ * 5. Optionally assign ActivePaletteProfile for color overrides
  *
- * The widget automatically manages Dynamic Material Instance and configures
- * all parameters (texture, UVs, margins, colors) when properties change.
+ * Note: Widget dimensions are determined by the source asset and global
+ * pixel size settings. Manual size adjustments are not permitted.
  */
 UCLASS(ClassGroup = (Custom), meta = (DisplayName = "Pixel Component", Category = "Pixel Component"))
 class PIXELCOMPONENT_API UPixelComponent : public UImage
@@ -133,6 +137,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Image")
 	void ClearMaterial();
 
+	/**
+	 * Get the current widget dimensions based on source asset.
+	 * @return Current size in screen space (after global pixel size scaling)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Dimensions")
+	FVector2f GetPixelComponentSize() const { return DesiredSize; }
+
+	/**
+	 * Get the original source dimensions (before global pixel size scaling).
+	 * @return Original size in pixels
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Dimensions")
+	FVector2f GetOriginalDimensions() const { return OriginalDimensions; }
+
+	/**
+	 * Check if the widget has fixed dimensions locked to source asset.
+	 * @return true if dimensions are fixed and non-resizable
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Dimensions")
+	bool HasFixedDimensions() const { return bFixedSize; }
+
 protected:
 	// ========================================================================
 	// Properties
@@ -174,6 +199,27 @@ protected:
 	UPROPERTY(Transient, DuplicateTransient, BlueprintReadOnly, Category = "Pixel Component|Internal")
 	UMaterialInstanceDynamic* DynamicMaterialInstance;
 
+	/**
+	 * Cached widget dimensions after global pixel size scaling.
+	 * Used to set the desired size of the widget.
+	 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Pixel Component|Dimensions")
+	FVector2f DesiredSize;
+
+	/**
+	 * Cached original source dimensions (before scaling).
+	 * Updated automatically when PixelAsset changes.
+	 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Pixel Component|Dimensions")
+	FVector2f OriginalDimensions;
+
+	/**
+	 * Indicates that widget dimensions are locked to source asset.
+	 * When true, manual size adjustments are ignored.
+	 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Pixel Component|Dimensions")
+	bool bFixedSize;
+
 	// ========================================================================
 	// Internal Methods
 	// ========================================================================
@@ -201,4 +247,10 @@ protected:
 	 * Automatically retrieves SourceTexture from the asset.
 	 */
 	void ApplyTextureFromAsset();
+
+	/**
+	 * Calculate and apply widget dimensions from source asset.
+	 * Applies global pixel size scaling from settings.
+	 */
+	void CalculateAndApplyDimensions();
 };

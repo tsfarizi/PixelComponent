@@ -7,7 +7,9 @@
 DEFINE_LOG_CATEGORY_STATIC(LogPixelComponentAsset, Log, All);
 
 UPixelComponentAsset::UPixelComponentAsset()
-	: SourceTexture(nullptr)
+	: SourceMode(EPixelSourceMode::Texture)
+	, SourceTexture(nullptr)
+	, SourceMaterial(nullptr)
 	, NineSliceMargins(0.0f)
 	, DefaultPivot(0.0f, 0.0f, true)
 	, CachedTextureWidth(0)
@@ -25,6 +27,42 @@ void UPixelComponentAsset::SetSourceTexture(UTexture2D* NewTexture)
 	SourceTexture = NewTexture;
 	UpdateTextureDimensionsCache();
 	RefreshNormalizedUVs();
+}
+
+UMaterialInterface* UPixelComponentAsset::GetActiveMaterial() const
+{
+	if (SourceMode == EPixelSourceMode::Material)
+	{
+		return SourceMaterial;
+	}
+
+	return nullptr;
+}
+
+void UPixelComponentAsset::SetSourceMaterial(UMaterialInterface* NewMaterial)
+{
+	SourceMaterial = NewMaterial;
+	SourceMode = EPixelSourceMode::Material;
+	RefreshNormalizedUVs();
+}
+
+void UPixelComponentAsset::SetSourceMode(EPixelSourceMode NewMode)
+{
+	if (SourceMode != NewMode)
+	{
+		SourceMode = NewMode;
+
+		if (NewMode == EPixelSourceMode::Texture)
+		{
+			SourceMaterial = nullptr;
+		}
+		else
+		{
+			SourceTexture = nullptr;
+		}
+
+		RefreshNormalizedUVs();
+	}
 }
 
 const FSliceData* UPixelComponentAsset::FindSliceByName(const FString& SliceName) const
@@ -910,4 +948,39 @@ void UPixelComponentAsset::SetScalingFromImport(float InScaleFactor, bool InbIsS
 {
 	AppliedScaleFactor = InScaleFactor;
 	bIsScaled = InbIsScaled;
+}
+
+void UPixelComponentAsset::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	if (!PropertyChangedEvent.Property)
+	{
+		return;
+	}
+
+	const FName PropertyName = PropertyChangedEvent.Property->GetFName();
+
+	if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponentAsset, SourceMode))
+	{
+		if (SourceMode == EPixelSourceMode::Texture)
+		{
+			SourceMaterial = nullptr;
+		}
+		else
+		{
+			SourceTexture = nullptr;
+		}
+
+		RefreshNormalizedUVs();
+	}
+	else if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponentAsset, SourceTexture))
+	{
+		UpdateTextureDimensionsCache();
+		RefreshNormalizedUVs();
+	}
+	else if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponentAsset, SourceMaterial))
+	{
+		RefreshNormalizedUVs();
+	}
 }

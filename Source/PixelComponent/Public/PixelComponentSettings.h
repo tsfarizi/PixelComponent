@@ -204,18 +204,6 @@ public:
 	bool bGenerateMipmaps;
 
 	/**
-	 * Default material for PixelComponent widgets.
-	 *
-	 * This material is used by UPixelComponent widgets to render pixel art.
-	 * Should have a Texture parameter named "PixelTexture".
-	 */
-	UPROPERTY(EditAnywhere, Category = "Material Settings", meta = (
-		DisplayName = "Default Pixel Material",
-		ToolTip = "Default material used by PixelComponent widgets (should have PixelTexture parameter)"
-	))
-	UMaterialInterface* DefaultPixelMaterial;
-
-	/**
 	 * Group name for organizing imported assets.
 	 */
 	UPROPERTY(Config, EditAnywhere, Category = "Import Settings", meta = (

@@ -44,7 +44,7 @@ public:
 
 	/**
 	 * Retrieves the source texture referenced by this asset.
-	 * @return Pointer to UTexture2D, or nullptr if no texture is assigned
+	 * @return Pointer to UTexture2D, or nullptr if no texture is assigned or in Material mode
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	UTexture2D* GetSourceTexture() const { return SourceTexture; }
@@ -62,6 +62,36 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
 	bool HasValidTexture() const { return SourceTexture != nullptr; }
+
+	/**
+	 * Retrieves the active material based on SourceMode.
+	 * In Texture mode: returns the default pixel material from settings.
+	 * In Material mode: returns the custom SourceMaterial.
+	 * @return Pointer to UMaterialInterface, or nullptr if no material is available
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
+	UMaterialInterface* GetActiveMaterial() const;
+
+	/**
+	 * Assigns a source material to this asset (sets SourceMode to Material).
+	 * @param NewMaterial The material to use as primary source
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Asset")
+	void SetSourceMaterial(UMaterialInterface* NewMaterial);
+
+	/**
+	 * Gets the current source mode.
+	 * @return Current EPixelSourceMode value
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Source")
+	EPixelSourceMode GetSourceMode() const { return SourceMode; }
+
+	/**
+	 * Sets the source mode and clears the inactive source.
+	 * @param NewMode The new source mode to use
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Source")
+	void SetSourceMode(EPixelSourceMode NewMode);
 
 	/**
 	 * Retrieves the asset name from Aseprite metadata or import filename.
@@ -434,14 +464,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Internal")
 	bool ValidateAsset() const;
 
+	//~ Begin UObject Interface
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+	//~ End UObject Interface
+
 protected:
 	// ========================================================================
 	// Properties
 	// ========================================================================
 
-	/** Source texture referenced by this asset */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component")
+	/**
+	 * Source mode selection.
+	 * Determines whether this asset uses a texture or material as its primary visual source.
+	 * Only one source type is active at a time (mutual exclusion).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Source")
+	EPixelSourceMode SourceMode;
+
+	/**
+	 * Source texture for Texture mode.
+	 * This is the primary visual source when SourceMode is set to Texture.
+	 * In Material mode, this is used as reference only.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Source", meta = (EditCondition = "SourceMode == EPixelSourceMode::Texture", EditConditionHides))
 	UTexture2D* SourceTexture;
+
+	/**
+	 * Source material for Material mode.
+	 * This is the primary visual source when SourceMode is set to Material.
+	 * Must have a Texture parameter named "PixelTexture" for compatibility.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Source", meta = (EditCondition = "SourceMode == EPixelSourceMode::Material", EditConditionHides))
+	UMaterialInterface* SourceMaterial;
 
 	/** Asset name from Aseprite metadata */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component")

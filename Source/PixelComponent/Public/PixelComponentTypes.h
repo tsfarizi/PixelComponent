@@ -23,6 +23,21 @@ enum class EPixelAnimDirection : uint8
 };
 
 /**
+ * Source mode for PixelComponent assets.
+ * Determines whether the asset uses a texture or material as its primary visual source.
+ * This implements mutual exclusion - only one source type is active at a time.
+ */
+UENUM(BlueprintType)
+enum class EPixelSourceMode : uint8
+{
+	/** Use a texture as the visual source. Material parameters are injected into a default material. */
+	Texture		UMETA(DisplayName = "Texture"),
+	
+	/** Use a custom material as the visual source. Texture is optional and used for reference only. */
+	Material	UMETA(DisplayName = "Material")
+};
+
+/**
  * Normalized UV Rectangle for Pixel Art HD pipeline.
  * Stores UV coordinates in 0-1 range with validation.
  * 
