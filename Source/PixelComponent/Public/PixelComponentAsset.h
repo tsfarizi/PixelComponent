@@ -94,6 +94,23 @@ public:
 	void SetSourceMode(EPixelSourceMode NewMode);
 
 	/**
+	 * Get source dimensions based on current SourceMode.
+	 * Texture mode: Returns SourceTexture dimensions.
+	 * Material mode: Returns ManualMaterialSize value.
+	 * Applies global pixel size scaling if enabled in settings.
+	 * @return Source dimensions as FVector2D (scaled)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Dimensions")
+	FVector2D GetSourceDimensions() const;
+
+	/**
+	 * Get original source dimensions (before global pixel size scaling).
+	 * @return Original dimensions as FIntPoint
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Pixel Component|Dimensions")
+	FIntPoint GetOriginalSourceDimensions() const;
+
+	/**
 	 * Retrieves the asset name from Aseprite metadata or import filename.
 	 * @return Reference to the asset name string
 	 */
@@ -497,6 +514,14 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Source", meta = (EditCondition = "SourceMode == EPixelSourceMode::Material", EditConditionHides))
 	UMaterialInterface* SourceMaterial;
 
+	/**
+	 * Manual dimensions for Material mode (when source has no inherent size).
+	 * Required when using Material source mode to prevent zero-size widgets.
+	 * Default: 16x16 pixels.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component|Source", meta = (EditCondition = "SourceMode == EPixelSourceMode::Material", EditConditionHides))
+	FIntPoint ManualMaterialSize;
+
 	/** Asset name from Aseprite metadata */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pixel Component")
 	FString AssetName;
@@ -589,6 +614,12 @@ private:
 	 * Validate UV coordinates are within bounds.
 	 */
 	bool ValidateUVs() const;
+
+	/**
+	 * Validate ManualMaterialSize is non-zero for Material mode.
+	 * Resets to 16x16 default if invalid.
+	 */
+	void ValidateManualMaterialSize();
 
 public:
 	/**

@@ -10,6 +10,7 @@ UPixelComponentAsset::UPixelComponentAsset()
 	: SourceMode(EPixelSourceMode::Texture)
 	, SourceTexture(nullptr)
 	, SourceMaterial(nullptr)
+	, ManualMaterialSize(16, 16)
 	, NineSliceMargins(0.0f)
 	, DefaultPivot(0.0f, 0.0f, true)
 	, CachedTextureWidth(0)
@@ -63,6 +64,45 @@ void UPixelComponentAsset::SetSourceMode(EPixelSourceMode NewMode)
 
 		RefreshNormalizedUVs();
 	}
+}
+
+FVector2D UPixelComponentAsset::GetSourceDimensions() const
+{
+	FIntPoint OriginalSize = GetOriginalSourceDimensions();
+
+	UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
+	if (!Settings || !Settings->bEnableAutoScaleOnImport)
+	{
+		return FVector2D(OriginalSize.X, OriginalSize.Y);
+	}
+
+	const float ScaleFactor = UPixelComponentSettings::CalculateScaleFactor(FMath::Max(OriginalSize.X, OriginalSize.Y));
+	int32 ScaledWidth = FMath::RoundToInt(static_cast<float>(OriginalSize.X) * ScaleFactor);
+	int32 ScaledHeight = FMath::RoundToInt(static_cast<float>(OriginalSize.Y) * ScaleFactor);
+
+	if (Settings->bSnapToPixelGrid)
+	{
+		const int32 PixelSize = Settings->GlobalPixelSize;
+		ScaledWidth = FMath::RoundToInt(static_cast<float>(ScaledWidth) / PixelSize) * PixelSize;
+		ScaledHeight = FMath::RoundToInt(static_cast<float>(ScaledHeight) / PixelSize) * PixelSize;
+	}
+
+	return FVector2D(ScaledWidth, ScaledHeight);
+}
+
+FIntPoint UPixelComponentAsset::GetOriginalSourceDimensions() const
+{
+	if (SourceMode == EPixelSourceMode::Material)
+	{
+		return ManualMaterialSize;
+	}
+
+	if (SourceTexture)
+	{
+		return FIntPoint(SourceTexture->GetSurfaceWidth(), SourceTexture->GetSurfaceHeight());
+	}
+
+	return FIntPoint(16, 16);
 }
 
 const FSliceData* UPixelComponentAsset::FindSliceByName(const FString& SliceName) const
@@ -970,6 +1010,7 @@ void UPixelComponentAsset::PostEditChangeProperty(FPropertyChangedEvent& Propert
 		else
 		{
 			SourceTexture = nullptr;
+			ValidateManualMaterialSize();
 		}
 
 		RefreshNormalizedUVs();
@@ -981,6 +1022,26 @@ void UPixelComponentAsset::PostEditChangeProperty(FPropertyChangedEvent& Propert
 	}
 	else if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponentAsset, SourceMaterial))
 	{
+		ValidateManualMaterialSize();
 		RefreshNormalizedUVs();
+	}
+	else if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponentAsset, ManualMaterialSize))
+	{
+		ValidateManualMaterialSize();
+		RefreshNormalizedUVs();
+	}
+}
+
+void UPixelComponentAsset::ValidateManualMaterialSize()
+{
+	if (SourceMode == EPixelSourceMode::Material)
+	{
+		if (ManualMaterialSize.X <= 0 || ManualMaterialSize.Y <= 0)
+		{
+			UE_LOG(LogPixelComponentAsset, Warning, 
+				TEXT("ManualMaterialSize is zero or negative (%dx%d). Setting to default 16x16."),
+				ManualMaterialSize.X, ManualMaterialSize.Y);
+			ManualMaterialSize = FIntPoint(16, 16);
+		}
 	}
 }

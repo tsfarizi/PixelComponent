@@ -5,640 +5,356 @@
 #include "CoreMinimal.h"
 #include "PixelComponentTypes.generated.h"
 
-/**
- * Forward declarations for efficient string handling
- * Note: Using FString instead of std::wstring_view for UE5 compatibility
- */
+// =============================================================================
+// PixelComponent Types
+// =============================================================================
+// Core data structures and enumerations for the PixelComponent system.
+// Organized by domain: Animation, Source, UV/Geometry, Slices, Layers, Metadata
+// =============================================================================
+
+#pragma region Enums
 
 /**
- * Animation direction types from Aseprite.
+ * Animation playback direction from Aseprite frame tags.
  */
 UENUM(BlueprintType)
 enum class EPixelAnimDirection : uint8
 {
-	Forward		UMETA(DisplayName = "Forward"),
-	Reverse		UMETA(DisplayName = "Reverse"),
-	PingPong	UMETA(DisplayName = "Ping Pong"),
-	PingPongReverse UMETA(DisplayName = "Ping Pong Reverse")
+	Forward			UMETA(DisplayName = "Forward"),
+	Reverse			UMETA(DisplayName = "Reverse"),
+	PingPong		UMETA(DisplayName = "Ping Pong"),
+	PingPongReverse	UMETA(DisplayName = "Ping Pong Reverse")
 };
 
 /**
  * Source mode for PixelComponent assets.
- * Determines whether the asset uses a texture or material as its primary visual source.
- * This implements mutual exclusion - only one source type is active at a time.
+ * Implements mutual exclusion - only one source type is active at a time.
  */
 UENUM(BlueprintType)
 enum class EPixelSourceMode : uint8
 {
-	/** Use a texture as the visual source. Material parameters are injected into a default material. */
+	/** Texture mode: Uses texture with default material for parameter injection */
 	Texture		UMETA(DisplayName = "Texture"),
-	
-	/** Use a custom material as the visual source. Texture is optional and used for reference only. */
+
+	/** Material mode: Uses custom material as primary visual source */
 	Material	UMETA(DisplayName = "Material")
 };
 
+#pragma endregion
+
+#pragma region UV_Geometry
+
 /**
- * Normalized UV Rectangle for Pixel Art HD pipeline.
- * Stores UV coordinates in 0-1 range with validation.
- * 
- * Technical Notes:
- * - MinX, MinY = Top-Left UV (Y is inverted for texture space)
- * - MaxX, MaxY = Bottom-Right UV
- * - All values must be in [0.0, 1.0] range
+ * Normalized UV rectangle for HD pixel art pipeline.
+ * Stores UV coordinates in 0-1 range with automatic validation.
+ *
+ * Coordinate System:
+ * - MinX, MinY = Top-Left corner (Y inverted for texture space)
+ * - MaxX, MaxY = Bottom-Right corner
+ * - All values clamped to [0.0, 1.0] range
  */
 USTRUCT(BlueprintType)
 struct PIXELCOMPONENT_API FPixelUVRect
 {
 	GENERATED_BODY()
 
-	/** Minimum X (Left) UV coordinate [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float MinX;
 
-	/** Minimum Y (Top) UV coordinate [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float MinY;
 
-	/** Maximum X (Right) UV coordinate [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float MaxX;
 
-	/** Maximum Y (Bottom) UV coordinate [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float MaxY;
 
-	FPixelUVRect()
-		: MinX(0.0f)
-		, MinY(0.0f)
-		, MaxX(0.0f)
-		, MaxY(0.0f)
-	{
-	}
+	FPixelUVRect();
+	FPixelUVRect(float InMinX, float InMinY, float InMaxX, float InMaxY);
 
-	FPixelUVRect(float InMinX, float InMinY, float InMaxX, float InMaxY)
-		: MinX(InMinX)
-		, MinY(InMinY)
-		, MaxX(InMaxX)
-		, MaxY(InMaxY)
-	{
-		Validate();
-	}
+	/** Create from pixel-space rectangle with automatic UV normalization */
+	static FPixelUVRect FromPixelRect(int32 PixelX, int32 PixelY, int32 PixelW, int32 PixelH,
+		int32 TextureWidth, int32 TextureHeight);
 
-	/**
-	 * Create from pixel-space rectangle and texture dimensions.
-	 * Performs pre-calculated UV normalization.
-	 */
-	static FPixelUVRect FromPixelRect(int32 PixelX, int32 PixelY, int32 PixelW, int32 PixelH, 
-		int32 TextureWidth, int32 TextureHeight)
-	{
-		if (TextureWidth <= 0 || TextureHeight <= 0)
-		{
-			return FPixelUVRect();
-		}
+	/** Validate UV coordinates are within [0.0, 1.0] range */
+	bool Validate() const;
 
-		const float InvTexW = 1.0f / static_cast<float>(TextureWidth);
-		const float InvTexH = 1.0f / static_cast<float>(TextureHeight);
+	/** Get UV rectangle width */
+	float GetWidth() const;
 
-		const float MinXVal = static_cast<float>(PixelX) * InvTexW;
-		const float MinYVal = 1.0f - static_cast<float>(PixelY + PixelH) * InvTexH;
-		const float MaxXVal = static_cast<float>(PixelX + PixelW) * InvTexW;
-		const float MaxYVal = 1.0f - static_cast<float>(PixelY) * InvTexH;
+	/** Get UV rectangle height */
+	float GetHeight() const;
 
-		return FPixelUVRect(MinXVal, MinYVal, MaxXVal, MaxYVal);
-	}
+	/** Get center UV coordinate */
+	FVector2f GetCenter() const;
 
-	/**
-	 * Validate that all UV coordinates are within [0.0, 1.0] range.
-	 * Clamps values if out of range.
-	 * @return true if values were already valid
-	 */
-	bool Validate() const
-	{
-		bool bWasValid = true;
-		float TempMinX = MinX, TempMinY = MinY, TempMaxX = MaxX, TempMaxY = MaxY;
+	/** Check if UV rect has valid non-zero area */
+	bool IsValid() const;
 
-		if (TempMinX < 0.0f || TempMinX > 1.0f) { TempMinX = FMath::Clamp(TempMinX, 0.0f, 1.0f); bWasValid = false; }
-		if (TempMinY < 0.0f || TempMinY > 1.0f) { TempMinY = FMath::Clamp(TempMinY, 0.0f, 1.0f); bWasValid = false; }
-		if (TempMaxX < 0.0f || TempMaxX > 1.0f) { TempMaxX = FMath::Clamp(TempMaxX, 0.0f, 1.0f); bWasValid = false; }
-		if (TempMaxY < 0.0f || TempMaxY > 1.0f) { TempMaxY = FMath::Clamp(TempMaxY, 0.0f, 1.0f); bWasValid = false; }
+	/** Convert to FBox2f for compatibility */
+	FBox2f ToBox2f() const;
 
-		// Ensure Min < Max
-		if (TempMinX > TempMaxX) { float Temp = TempMinX; TempMinX = TempMaxX; TempMaxX = Temp; bWasValid = false; }
-		if (TempMinY > TempMaxY) { float Temp = TempMinY; TempMinY = TempMaxY; TempMaxY = Temp; bWasValid = false; }
-
-		return bWasValid;
-	}
-
-	/**
-	 * Get the width of the UV rectangle.
-	 */
-	float GetWidth() const { return MaxX - MinX; }
-
-	/**
-	 * Get the height of the UV rectangle.
-	 */
-	float GetHeight() const { return MaxY - MinY; }
-
-	/**
-	 * Get the center UV coordinate.
-	 */
-	FVector2f GetCenter() const
-	{
-		return FVector2f((MinX + MaxX) * 0.5f, (MinY + MaxY) * 0.5f);
-	}
-
-	/**
-	 * Check if this UV rect is valid (non-zero area and within bounds).
-	 */
-	bool IsValid() const
-	{
-		return (GetWidth() > 0.0f) && (GetHeight() > 0.0f) &&
-			   (MinX >= 0.0f && MinX <= 1.0f) &&
-			   (MinY >= 0.0f && MinY <= 1.0f) &&
-			   (MaxX >= 0.0f && MaxX <= 1.0f) &&
-			   (MaxY >= 0.0f && MaxY <= 1.0f);
-	}
-
-	/**
-	 * Convert to FBox2f for compatibility.
-	 */
-	FBox2f ToBox2f() const
-	{
-		return FBox2f(FVector2f(MinX, MinY), FVector2f(MaxX, MaxY));
-	}
-
-	/**
-	 * Equality operator with tolerance for floating point comparison.
-	 */
-	bool operator==(const FPixelUVRect& Other) const
-	{
-		const float Tolerance = 0.0001f;
-		return FMath::Abs(MinX - Other.MinX) < Tolerance &&
-			   FMath::Abs(MinY - Other.MinY) < Tolerance &&
-			   FMath::Abs(MaxX - Other.MaxX) < Tolerance &&
-			   FMath::Abs(MaxY - Other.MaxY) < Tolerance;
-	}
+	/** Equality comparison with floating point tolerance */
+	bool operator==(const FPixelUVRect& Other) const;
 };
 
 /**
- * 9-Slice margins in normalized UV space.
- * Used for HD pixel art tiling without distortion.
+ * 9-slice margins in normalized UV space.
+ * Used for scalable UI elements without distortion.
  */
 USTRUCT(BlueprintType)
 struct PIXELCOMPONENT_API FPixelNineSliceMargins
 {
 	GENERATED_BODY()
 
-	/** Left margin UV [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float Left;
 
-	/** Top margin UV [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float Top;
 
-	/** Right margin UV [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float Right;
 
-	/** Bottom margin UV [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float Bottom;
 
-	FPixelNineSliceMargins()
-		: Left(0.0f), Top(0.0f), Right(0.0f), Bottom(0.0f)
-	{
-	}
+	FPixelNineSliceMargins();
+	FPixelNineSliceMargins(float InLeft, float InTop, float InRight, float InBottom);
 
-	FPixelNineSliceMargins(float InLeft, float InTop, float InRight, float InBottom)
-		: Left(InLeft), Top(InTop), Right(InRight), Bottom(InBottom)
-	{
-	}
-
-	/**
-	 * Create from pixel margins and texture dimensions.
-	 */
+	/** Create from pixel margins with automatic UV normalization */
 	static FPixelNineSliceMargins FromPixelMargins(float PixelLeft, float PixelTop, float PixelRight, float PixelBottom,
-		int32 TextureWidth, int32 TextureHeight)
-	{
-		if (TextureWidth <= 0 || TextureHeight <= 0)
-		{
-			return FPixelNineSliceMargins();
-		}
+		int32 TextureWidth, int32 TextureHeight);
 
-		return FPixelNineSliceMargins(
-			PixelLeft / static_cast<float>(TextureWidth),
-			PixelTop / static_cast<float>(TextureHeight),
-			PixelRight / static_cast<float>(TextureWidth),
-			PixelBottom / static_cast<float>(TextureHeight)
-		);
-	}
+	/** Get center UV region for tiling/stretching */
+	FPixelUVRect GetCenterUV(const FPixelUVRect& OuterUV) const;
 
-	/**
-	 * Get the center UV region for tiling.
-	 */
-	FPixelUVRect GetCenterUV(const FPixelUVRect& OuterUV) const
-	{
-		return FPixelUVRect(
-			OuterUV.MinX + Left,
-			OuterUV.MinY + Bottom,
-			OuterUV.MaxX - Right,
-			OuterUV.MaxY - Top
-		);
-	}
-
-	bool IsValid() const
-	{
-		return Left >= 0.0f && Top >= 0.0f && Right >= 0.0f && Bottom >= 0.0f &&
-			   (Left + Right) <= 1.0f && (Top + Bottom) <= 1.0f;
-	}
+	/** Validate margins are within valid range */
+	bool IsValid() const;
 };
 
-/**
- * Animation sequence data extracted from Aseprite frame tags.
- * Contains all information needed for playback.
- */
-USTRUCT(BlueprintType)
-struct PIXELCOMPONENT_API FPixelAnimSequence
-{
-	GENERATED_BODY()
+#pragma endregion
 
-	/** Sequence name from Aseprite tag */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation")
-	FName SequenceName;
-
-	/** Starting frame index (inclusive) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "0"))
-	int32 StartFrame;
-
-	/** Ending frame index (inclusive) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "0"))
-	int32 EndFrame;
-
-	/** Frame duration in milliseconds (can be overridden per-frame) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "1"))
-	int32 FrameDurationMs;
-
-	/** Animation playback direction */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation")
-	EPixelAnimDirection Direction;
-
-	/** Number of loops (0 = infinite) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "0"))
-	int32 LoopCount;
-
-	/** Total duration in milliseconds (computed) */
-	UPROPERTY(VisibleAnywhere, Category = "PixelComponent|Animation")
-	int32 TotalDurationMs;
-
-	FPixelAnimSequence()
-		: SequenceName(NAME_None)
-		, StartFrame(0)
-		, EndFrame(0)
-		, FrameDurationMs(100)
-		, Direction(EPixelAnimDirection::Forward)
-		, LoopCount(0)
-		, TotalDurationMs(0)
-	{
-	}
-
-	/**
-	 * Calculate total duration based on frame count and duration.
-	 */
-	void CalculateDuration()
-	{
-		const int32 FrameCount = FMath::Max(1, EndFrame - StartFrame + 1);
-		TotalDurationMs = FrameCount * FrameDurationMs;
-	}
-
-	/**
-	 * Get the number of frames in this sequence.
-	 */
-	int32 GetFrameCount() const
-	{
-		return FMath::Max(0, EndFrame - StartFrame + 1);
-	}
-
-	/**
-	 * Validate frame indices.
-	 */
-	bool Validate(int32 MaxFrameIndex) const
-	{
-		if (StartFrame < 0) return false;
-		if (EndFrame > MaxFrameIndex) return false;
-		if (StartFrame > EndFrame) return false;
-		return true;
-	}
-};
+#pragma region Pixel_Geometry
 
 /**
- * Metadata for a single layer in the Aseprite file.
- * Contains information about layer visibility, opacity, and blend mode.
- */
-USTRUCT(BlueprintType)
-struct PIXELCOMPONENT_API FLayerMetadata
-{
-	GENERATED_BODY()
-
-	/** Name of the layer as defined in Aseprite */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
-	FString Name;
-
-	/** Whether the layer is visible in Aseprite */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
-	bool bVisible;
-
-	/** Layer opacity (0.0 - 1.0) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float Opacity;
-
-	/** User data/color associated with the layer */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
-	FColor UserDataColor;
-
-	/** Blend mode from Aseprite (normal, multiply, screen, etc.) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
-	FString BlendMode;
-
-	/** Parent layer name (for nested layers) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
-	FString ParentLayerName;
-
-	/** Layer index in the stack (0 = bottom) */
-	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
-	int32 LayerIndex;
-
-	FLayerMetadata()
-		: bVisible(true)
-		, Opacity(1.0f)
-		, UserDataColor(FColor::White)
-		, LayerIndex(0)
-	{
-	}
-};
-
-/**
- * Rectangle defined in pixel space.
- * Represents a slice or region within the source texture.
- * Legacy structure - use FPixelUVRect for new code.
+ * Pixel-space rectangle for slice definitions.
+ * Legacy structure - prefer FPixelUVRect for new code.
  */
 USTRUCT(BlueprintType)
 struct PIXELCOMPONENT_API FPixelRect
 {
 	GENERATED_BODY()
 
-	/** X position in pixels */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 X;
 
-	/** Y position in pixels */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 Y;
 
-	/** Width in pixels */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 Width;
 
-	/** Height in pixels */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 Height;
 
-	FPixelRect()
-		: X(0)
-		, Y(0)
-		, Width(0)
-		, Height(0)
-	{
-	}
+	FPixelRect();
+	FPixelRect(int32 InX, int32 InY, int32 InWidth, int32 InHeight);
 
-	FPixelRect(int32 InX, int32 InY, int32 InWidth, int32 InHeight)
-		: X(InX)
-		, Y(InY)
-		, Width(InWidth)
-		, Height(InHeight)
-	{
-	}
+	/** Convert to normalized UV coordinates */
+	FPixelUVRect ToNormalizedUV(int32 TextureWidth, int32 TextureHeight) const;
 
-	/** Convert to normalized UV coordinates given texture dimensions */
-	FPixelUVRect ToNormalizedUV(int32 TextureWidth, int32 TextureHeight) const
-	{
-		return FPixelUVRect::FromPixelRect(X, Y, Width, Height, TextureWidth, TextureHeight);
-	}
-
-	bool IsValid() const
-	{
-		return Width > 0 && Height > 0;
-	}
+	/** Validate rectangle has positive dimensions */
+	bool IsValid() const;
 };
 
 /**
- * Pivot point for slice transformation.
- * Used for consistent rotation and scaling anchor.
+ * Pivot point for slice transformations.
+ * Defines rotation/scaling anchor point.
  */
 USTRUCT(BlueprintType)
 struct PIXELCOMPONENT_API FPixelPivot
 {
 	GENERATED_BODY()
 
-	/** Pivot X in pixels (relative to slice origin) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	float X;
 
-	/** Pivot Y in pixels (relative to slice origin) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	float Y;
 
-	/** Pivot mode */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	bool bIsCenter;
 
-	FPixelPivot()
-		: X(0.0f)
-		, Y(0.0f)
-		, bIsCenter(true)
-	{
-	}
+	FPixelPivot();
+	FPixelPivot(float InX, float InY, bool bInIsCenter = false);
 
-	FPixelPivot(float InX, float InY, bool bInIsCenter = false)
-		: X(InX)
-		, Y(InY)
-		, bIsCenter(bInIsCenter)
-	{
-	}
+	/** Create pivot from percentage values (0.0 = left/top, 1.0 = right/bottom) */
+	static FPixelPivot FromPercentage(float PercentX, float PercentY, int32 SliceWidth, int32 SliceHeight);
 
-	/**
-	 * Create pivot from percentage (0.0 = left/top, 1.0 = right/bottom).
-	 */
-	static FPixelPivot FromPercentage(float PercentX, float PercentY, int32 SliceWidth, int32 SliceHeight)
-	{
-		return FPixelPivot(
-			PercentX * static_cast<float>(SliceWidth),
-			PercentY * static_cast<float>(SliceHeight),
-			false
-		);
-	}
-
-	/**
-	 * Get normalized pivot (0.0 - 1.0 range).
-	 */
-	FVector2f GetNormalized(int32 SliceWidth, int32 SliceHeight) const
-	{
-		if (SliceWidth <= 0 || SliceHeight <= 0)
-		{
-			return FVector2f(0.5f, 0.5f);
-		}
-
-		return FVector2f(
-			X / static_cast<float>(SliceWidth),
-			Y / static_cast<float>(SliceHeight)
-		);
-	}
+	/** Get normalized pivot coordinates (0.0 - 1.0 range) */
+	FVector2f GetNormalized(int32 SliceWidth, int32 SliceHeight) const;
 };
 
+#pragma endregion
+
+#pragma region Slices
+
 /**
- * Slice data extracted from Aseprite JSON.
- * Enhanced with pre-calculated UVs and pivot points.
+ * Slice definition extracted from Aseprite JSON.
+ * Contains spatial data, 9-slice margins, and pivot information.
  */
 USTRUCT(BlueprintType)
 struct PIXELCOMPONENT_API FSliceData
 {
 	GENERATED_BODY()
 
-	/** Name of the slice */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FString Name;
 
-	/** Base pixel-space rectangle for the slice */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FPixelRect PixelRect;
 
-	/** Pre-calculated normalized UV rectangle [0.0 - 1.0] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FPixelUVRect NormalizedUVRect;
 
-	/** Whether this slice has 9-slice metadata */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	bool bIsNineSlice;
 
-	/** 9-slice margins in UV space */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FPixelNineSliceMargins NineSliceMarginsUV;
 
-	/** Pivot point for rotation/scaling */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FPixelPivot Pivot;
 
-	/** Slice color tag (from Aseprite) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FColor SliceColor;
 
-	/**
-	 * Legacy field for backwards compatibility.
-	 * @deprecated Use NormalizedUVRect instead
-	 */
+	/** Legacy field for backwards compatibility */
 	UPROPERTY(VisibleAnywhere, Category = "PixelComponent|Deprecated")
 	FBox2f NormalizedUVs;
 
-	FSliceData()
-		: bIsNineSlice(false)
-		, SliceColor(FColor::White)
-	{
-	}
+	FSliceData();
 
-	/**
-	 * Compute normalized UVs based on texture dimensions.
-	 * Updates both new (FPixelUVRect) and legacy (FBox2f) fields.
-	 */
-	void ComputeNormalizedUVs(int32 TextureWidth, int32 TextureHeight)
-	{
-		NormalizedUVRect = FPixelUVRect::FromPixelRect(
-			PixelRect.X, PixelRect.Y, PixelRect.Width, PixelRect.Height,
-			TextureWidth, TextureHeight
-		);
+	/** Compute normalized UVs from pixel rectangle */
+	void ComputeNormalizedUVs(int32 TextureWidth, int32 TextureHeight);
 
-		// Legacy compatibility
-		NormalizedUVs = NormalizedUVRect.ToBox2f();
-	}
+	/** Get center UV region for 9-slice tiling */
+	FPixelUVRect GetCenterUV() const;
 
-	/**
-	 * Get the center UV region for 9-slice tiling.
-	 */
-	FPixelUVRect GetCenterUV() const
-	{
-		if (!bIsNineSlice || !NormalizedUVRect.IsValid())
-		{
-			return NormalizedUVRect;
-		}
+	/** Validate slice data integrity */
+	bool Validate(int32 MaxTextureWidth, int32 MaxTextureHeight) const;
+};
 
-		return NineSliceMarginsUV.GetCenterUV(NormalizedUVRect);
-	}
+#pragma endregion
 
-	/**
-	 * Validate slice data.
-	 */
-	bool Validate(int32 MaxTextureWidth, int32 MaxTextureHeight) const
-	{
-		bool bValid = true;
+#pragma region Layers
 
-		if (!PixelRect.IsValid())
-		{
-			bValid = false;
-		}
+/**
+ * Layer metadata from Aseprite file.
+ * Contains visibility, opacity, and blend mode information.
+ */
+USTRUCT(BlueprintType)
+struct PIXELCOMPONENT_API FLayerMetadata
+{
+	GENERATED_BODY()
 
-		if (!NormalizedUVRect.Validate())
-		{
-			bValid = false;
-		}
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
+	FString Name;
 
-		if (bIsNineSlice && !NineSliceMarginsUV.IsValid())
-		{
-			bValid = false;
-		}
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
+	bool bVisible;
 
-		return bValid;
-	}
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Opacity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
+	FColor UserDataColor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
+	FString BlendMode;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
+	FString ParentLayerName;
+
+	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
+	int32 LayerIndex;
+
+	FLayerMetadata();
+};
+
+#pragma endregion
+
+#pragma region Animation
+
+/**
+ * Animation sequence from Aseprite frame tags.
+ * Contains all data needed for playback control.
+ */
+USTRUCT(BlueprintType)
+struct PIXELCOMPONENT_API FPixelAnimSequence
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation")
+	FName SequenceName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "0"))
+	int32 StartFrame;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "0"))
+	int32 EndFrame;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "1"))
+	int32 FrameDurationMs;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation")
+	EPixelAnimDirection Direction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent|Animation", meta = (ClampMin = "0"))
+	int32 LoopCount;
+
+	UPROPERTY(VisibleAnywhere, Category = "PixelComponent|Animation")
+	int32 TotalDurationMs;
+
+	FPixelAnimSequence();
+
+	/** Calculate total duration from frame count and duration */
+	void CalculateDuration();
+
+	/** Get number of frames in sequence */
+	int32 GetFrameCount() const;
+
+	/** Validate frame indices against asset frame count */
+	bool Validate(int32 MaxFrameIndex) const;
 };
 
 /**
  * Animation frame data from Aseprite.
+ * Contains timing and position information.
  */
 USTRUCT(BlueprintType)
 struct PIXELCOMPONENT_API FFrameData
 {
 	GENERATED_BODY()
 
-	/** Frame index */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 FrameIndex;
 
-	/** Frame duration in milliseconds */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (ClampMin = "1"))
 	int32 DurationMs;
 
-	/** Frame position in the sprite sheet (if animated) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FPixelRect Position;
 
-	/** Pre-calculated UV for this frame */
 	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
 	FPixelUVRect NormalizedUVRect;
 
-	FFrameData()
-		: FrameIndex(0)
-		, DurationMs(100)
-	{
-	}
+	FFrameData();
 
-	/**
-	 * Compute UV for this frame.
-	 */
-	void ComputeNormalizedUVs(int32 TextureWidth, int32 TextureHeight)
-	{
-		NormalizedUVRect = FPixelUVRect::FromPixelRect(
-			Position.X, Position.Y, Position.Width, Position.Height,
-			TextureWidth, TextureHeight
-		);
-	}
+	/** Compute UV coordinates for this frame */
+	void ComputeNormalizedUVs(int32 TextureWidth, int32 TextureHeight);
 };
 
 /**
@@ -650,239 +366,107 @@ struct PIXELCOMPONENT_API FAnimationTag
 {
 	GENERATED_BODY()
 
-	/** Tag name */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FString Name;
 
-	/** Starting frame index */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 FromFrame;
 
-	/** Ending frame index */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 ToFrame;
 
-	/** Animation direction (forward, reverse, pingpong) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FString Direction;
 
-	/** Number of times to repeat (0 = infinite) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	int32 Repeat;
 
-	FAnimationTag()
-		: FromFrame(0)
-		, ToFrame(0)
-		, Repeat(0)
-	{
-	}
+	FAnimationTag();
 
-	/**
-	 * Convert to new FPixelAnimSequence format.
-	 */
-	FPixelAnimSequence ToAnimSequence() const
-	{
-		FPixelAnimSequence Seq;
-		Seq.SequenceName = *Name;
-		Seq.StartFrame = FromFrame;
-		Seq.EndFrame = ToFrame;
-		Seq.LoopCount = Repeat;
-
-		if (Direction == TEXT("reverse"))
-		{
-			Seq.Direction = EPixelAnimDirection::Reverse;
-		}
-		else if (Direction == TEXT("pingpong"))
-		{
-			Seq.Direction = EPixelAnimDirection::PingPong;
-		}
-		else if (Direction == TEXT("pingpong_reverse"))
-		{
-			Seq.Direction = EPixelAnimDirection::PingPongReverse;
-		}
-		else
-		{
-			Seq.Direction = EPixelAnimDirection::Forward;
-		}
-
-		Seq.CalculateDuration();
-		return Seq;
-	}
+	/** Convert to modern FPixelAnimSequence format */
+	FPixelAnimSequence ToAnimSequence() const;
 };
 
-/**
- * Result of parsing Aseprite JSON data.
- * Used for error handling and validation.
- */
-USTRUCT(BlueprintType)
-struct PIXELCOMPONENT_API FAsepriteParseResult
-{
-	GENERATED_BODY()
+#pragma endregion
 
-	/** Whether parsing was successful */
-	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
-	bool bSuccess;
-
-	/** Error message if parsing failed */
-	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
-	FString ErrorMessage;
-
-	/** Warnings encountered during parsing */
-	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
-	TArray<FString> Warnings;
-
-	/** Critical validation failures */
-	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
-	TArray<FString> ValidationErrors;
-
-	FAsepriteParseResult()
-		: bSuccess(true)
-	{
-	}
-
-	static FAsepriteParseResult Success()
-	{
-		return FAsepriteParseResult();
-	}
-
-	static FAsepriteParseResult Error(const FString& InErrorMessage)
-	{
-		FAsepriteParseResult Result;
-		Result.bSuccess = false;
-		Result.ErrorMessage = InErrorMessage;
-		return Result;
-	}
-
-	void AddWarning(const FString& Warning)
-	{
-		Warnings.Add(Warning);
-	}
-
-	void AddValidationError(const FString& Error)
-	{
-		ValidationErrors.Add(Error);
-		bSuccess = false;
-	}
-
-	/**
-	 * Log all warnings and errors.
-	 */
-	void LogResults(const FString& Context) const
-	{
-		if (!bSuccess)
-		{
-			UE_LOG(LogTemp, Error, TEXT("PixelComponent Parse Error [%s]: %s"), *Context, *ErrorMessage);
-			for (const FString& Err : ValidationErrors)
-			{
-				UE_LOG(LogTemp, Error, TEXT("  Validation: %s"), *Err);
-			}
-		}
-
-		for (const FString& Warn : Warnings)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("PixelComponent Parse Warning [%s]: %s"), *Context, *Warn);
-		}
-	}
-};
+#pragma region Palette
 
 /**
- * Palette Profile for dynamic color overrides.
- * Maps layer names or color indices to new colors.
- * 
- * Technical Notes:
- * - Used for material instancing and dynamic recoloring
- * - Supports grayscale index mapping (0-255) to FLinearColor
- * - Layer-based overrides use FName keys (e.g., "Body", "Eyes")
+ * Palette profile for dynamic color overrides.
+ * Maps layer names or grayscale indices to custom colors.
+ *
+ * Use Cases:
+ * - Character variant colors (Gold, Silver, Bronze armor)
+ * - Day/night palette swaps
+ * - Team color customization
  */
 USTRUCT(BlueprintType)
 struct PIXELCOMPONENT_API FPixelPaletteProfile
 {
 	GENERATED_BODY()
 
-	/** Profile display name */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	FString ProfileName;
 
-	/** Color overrides: maps layer name or index to new color */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent", meta = (TitleProperty = "Key"))
 	TMap<FName, FLinearColor> ColorOverrides;
 
-	/** Grayscale index mapping (0-255) to color */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "PixelComponent")
 	TArray<FLinearColor> GrayscaleMap;
 
-	FPixelPaletteProfile()
-	{
-		// Pre-allocate grayscale map with 256 entries
-		GrayscaleMap.SetNum(256);
-		for (int32 i = 0; i < 256; i++)
-		{
-			const float Gray = static_cast<float>(i) / 255.0f;
-			GrayscaleMap[i] = FLinearColor(Gray, Gray, Gray, 1.0f);
-		}
-	}
+	FPixelPaletteProfile();
 
-	/**
-	 * Add a color override for a layer.
-	 * @param LayerName Name of the layer to override
-	 * @param Color New color to apply
-	 */
-	void AddColorOverride(const FName& LayerName, const FLinearColor& Color)
-	{
-		ColorOverrides.Add(LayerName, Color);
-	}
+	/** Add layer color override */
+	void AddColorOverride(const FName& LayerName, const FLinearColor& Color);
 
-	/**
-	 * Get color override for a layer.
-	 * @param LayerName Name of the layer
-	 * @param bFound Output: true if override exists
-	 * @return Override color or FLinearColor::White if not found
-	 */
-	FLinearColor GetColorOverride(const FName& LayerName, bool& bFound) const
-	{
-		const FLinearColor* FoundColor = ColorOverrides.Find(LayerName);
-		if (FoundColor)
-		{
-			bFound = true;
-			return *FoundColor;
-		}
-		bFound = false;
-		return FLinearColor::White;
-	}
+	/** Get color override for layer */
+	FLinearColor GetColorOverride(const FName& LayerName, bool& bFound) const;
 
-	/**
-	 * Set grayscale index to color mapping.
-	 * @param Index Grayscale index (0-255)
-	 * @param Color Color to map to
-	 */
-	void SetGrayscaleColor(int32 Index, const FLinearColor& Color)
-	{
-		if (Index >= 0 && Index < 256)
-		{
-			GrayscaleMap[Index] = Color;
-		}
-	}
+	/** Set grayscale index to color mapping (0-255) */
+	void SetGrayscaleColor(int32 Index, const FLinearColor& Color);
 
-	/**
-	 * Get color from grayscale mapping.
-	 * @param Index Grayscale index (0-255)
-	 * @return Mapped color
-	 */
-	FLinearColor GetGrayscaleColor(int32 Index) const
-	{
-		if (Index >= 0 && Index < 256)
-		{
-			return GrayscaleMap[Index];
-		}
-		return FLinearColor::White;
-	}
+	/** Get color from grayscale mapping */
+	FLinearColor GetGrayscaleColor(int32 Index) const;
 
-	/**
-	 * Validate the profile.
-	 * @return true if profile has valid data
-	 */
-	bool IsValid() const
-	{
-		return ColorOverrides.Num() > 0 || GrayscaleMap.Num() > 0;
-	}
+	/** Validate profile has valid data */
+	bool IsValid() const;
 };
+
+#pragma endregion
+
+#pragma region Import
+
+/**
+ * Result of parsing Aseprite JSON data.
+ * Used for error handling and validation feedback.
+ */
+USTRUCT(BlueprintType)
+struct PIXELCOMPONENT_API FAsepriteParseResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
+	bool bSuccess;
+
+	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
+	FString ErrorMessage;
+
+	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
+	TArray<FString> Warnings;
+
+	UPROPERTY(VisibleAnywhere, Category = "PixelComponent")
+	TArray<FString> ValidationErrors;
+
+	FAsepriteParseResult();
+
+	static FAsepriteParseResult Success();
+	static FAsepriteParseResult Error(const FString& InErrorMessage);
+
+	void AddWarning(const FString& Warning);
+	void AddValidationError(const FString& Error);
+
+	/** Log all warnings and errors to output log */
+	void LogResults(const FString& Context) const;
+};
+
+#pragma endregion

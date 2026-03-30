@@ -283,8 +283,9 @@ void UPixelComponent::ApplyTextureFromAsset()
 
 	FSlateBrush CurrentBrush = GetBrush();
 	CurrentBrush.SetResourceObject(SourceTexture);
-	CurrentBrush.ImageSize = FVector2f(static_cast<float>(SourceTexture->GetSurfaceWidth()), 
-		static_cast<float>(SourceTexture->GetSurfaceHeight()));
+
+	FVector2D SourceDimensions = PixelAsset->GetSourceDimensions();
+	CurrentBrush.ImageSize = SourceDimensions;
 	SetBrush(CurrentBrush);
 
 	UE_LOG(LogPixelComponent, Verbose, TEXT("Applied texture from asset: %s"), *SourceTexture->GetName());
@@ -299,38 +300,20 @@ void UPixelComponent::CalculateAndApplyDimensions()
 		return;
 	}
 
-	UTexture2D* SourceTexture = PixelAsset->GetSourceTexture();
-	if (!SourceTexture)
+	FVector2D SourceDimensions = PixelAsset->GetSourceDimensions();
+	FIntPoint OriginalSize = PixelAsset->GetOriginalSourceDimensions();
+
+	OriginalDimensions = FVector2f(static_cast<float>(OriginalSize.X), static_cast<float>(OriginalSize.Y));
+
+	if (SourceDimensions.IsNearlyZero())
 	{
+		UE_LOG(LogPixelComponent, Warning, TEXT("Source dimensions are zero. Using default 128x128."));
 		DesiredSize = FVector2f(128.0f, 128.0f);
-		OriginalDimensions = FVector2f(128.0f, 128.0f);
-		return;
 	}
-
-	const int32 OriginalWidth = SourceTexture->GetSurfaceWidth();
-	const int32 OriginalHeight = SourceTexture->GetSurfaceHeight();
-
-	OriginalDimensions = FVector2f(static_cast<float>(OriginalWidth), static_cast<float>(OriginalHeight));
-
-	UPixelComponentSettings* Settings = UPixelComponentSettings::Get();
-	int32 ScaledWidth = OriginalWidth;
-	int32 ScaledHeight = OriginalHeight;
-
-	if (Settings && Settings->bEnableAutoScaleOnImport)
+	else
 	{
-		const float ScaleFactor = UPixelComponentSettings::CalculateScaleFactor(FMath::Max(OriginalWidth, OriginalHeight));
-		ScaledWidth = FMath::RoundToInt(static_cast<float>(OriginalWidth) * ScaleFactor);
-		ScaledHeight = FMath::RoundToInt(static_cast<float>(OriginalHeight) * ScaleFactor);
-
-		if (Settings->bSnapToPixelGrid)
-		{
-			const int32 PixelSize = Settings->GlobalPixelSize;
-			ScaledWidth = FMath::RoundToInt(static_cast<float>(ScaledWidth) / PixelSize) * PixelSize;
-			ScaledHeight = FMath::RoundToInt(static_cast<float>(ScaledHeight) / PixelSize) * PixelSize;
-		}
+		DesiredSize = FVector2f(static_cast<float>(SourceDimensions.X), static_cast<float>(SourceDimensions.Y));
 	}
-
-	DesiredSize = FVector2f(static_cast<float>(ScaledWidth), static_cast<float>(ScaledHeight));
 
 	UE_LOG(LogPixelComponent, Log, TEXT("Calculated fixed dimensions: %.0fx%.0f (original: %.0fx%.0f)"),
 		DesiredSize.X, DesiredSize.Y, OriginalDimensions.X, OriginalDimensions.Y);
