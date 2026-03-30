@@ -56,6 +56,9 @@ void UPixelComponent::PostEditChangeProperty(FPropertyChangedEvent& PropertyChan
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(UPixelComponent, PixelAsset))
 	{
 		CalculateAndApplyDimensions();
+		
+		// Force Designer to update immediately
+		Modify();
 	}
 }
 
@@ -134,8 +137,11 @@ void UPixelComponent::RefreshMaterialParameters()
 	{
 		SendMaterialParameters();
 	}
-	
+
 	CalculateAndApplyDimensions();
+
+	// Force Slate to recalculate layout
+	InvalidateLayoutAndVolatility();
 }
 
 void UPixelComponent::ClearMaterial()
@@ -289,6 +295,9 @@ void UPixelComponent::ApplyTextureFromAsset()
 	SetBrush(CurrentBrush);
 
 	UE_LOG(LogPixelComponent, Verbose, TEXT("Applied texture from asset: %s"), *SourceTexture->GetName());
+	
+	// Force layout update after brush change
+	InvalidateLayoutAndVolatility();
 }
 
 void UPixelComponent::CalculateAndApplyDimensions()
@@ -317,4 +326,15 @@ void UPixelComponent::CalculateAndApplyDimensions()
 
 	UE_LOG(LogPixelComponent, Log, TEXT("Calculated fixed dimensions: %.0fx%.0f (original: %.0fx%.0f)"),
 		DesiredSize.X, DesiredSize.Y, OriginalDimensions.X, OriginalDimensions.Y);
+
+	// Update brush image size to match geometry
+	if (PixelAsset && PixelAsset->GetSourceTexture())
+	{
+		FSlateBrush CurrentBrush = GetBrush();
+		CurrentBrush.ImageSize = DesiredSize;
+		SetBrush(CurrentBrush);
+	}
+	
+	// Force layout recalculation
+	InvalidateLayoutAndVolatility();
 }
